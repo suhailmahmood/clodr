@@ -1,5 +1,5 @@
 {
-  "name": "clodr",
+  "name": "clodr-cli",
   "version": "1.0.0",
   "description": "Clodr - manage all your Claude Code sessions from a single menu",
   "type": "module",

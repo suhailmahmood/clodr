@@ -6,12 +6,14 @@ Starts or resumes Claude Code sessions in per-project folders under a workspace 
 
 ## Install
 
-Needs Node ≥ 18 and git. Straight from GitHub (no registry publish needed):
+Needs Node ≥ 18 and git.
 
 ```sh
-npm install -g github:suhailmahmood/clodr
+npm install -g clodr-cli
 clodr setup
 ```
+
+Or straight from GitHub: `npm install -g github:suhailmahmood/clodr`.
 
 From a clone: `npm install -g .` (or `npm link` while developing), then `clodr setup`.
 
@@ -21,7 +23,7 @@ Update: rerun the install command, then `clodr setup` again if the shell wrapper
 
 cmd and fish get no wrapper: Claude still launches in the folder, your shell just does not `cd` afterwards.
 
-Remove the shell integration: `clodr setup --remove`, then `npm uninstall -g clodr`.
+Remove the shell integration: `clodr setup --remove`, then `npm uninstall -g clodr-cli`.
 
 Config lives in `%APPDATA%\clodr\config.json` (Windows) or `~/.config/clodr/config.json` (`CLODR_HOME` overrides): `workspaces` (`[{path, name?}]`, in order), `view` (a workspace path or `else`).
 
