@@ -1,5 +1,7 @@
 # Clodr
 
+[![npm](https://img.shields.io/npm/v/clodr-cli)](https://www.npmjs.com/package/clodr-cli)
+
 Clodr - manage all your Claude Code sessions from a single menu.
 
 Starts or resumes Claude Code sessions in per-project folders under a workspace folder, lists your sessions in every other project, and cleans up leftovers. Cross-platform (Windows, macOS, Linux), Node ≥ 18, zero dependencies.
