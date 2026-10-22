@@ -17,5 +17,21 @@
   "scripts": {
     "test": "node --test"
   },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "cli",
+    "session-manager",
+    "sessions"
+  ],
+  "author": "Suhail Mahmood",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/suhailmahmood/clodr.git"
+  },
+  "homepage": "https://github.com/suhailmahmood/clodr#readme",
+  "bugs": {
+    "url": "https://github.com/suhailmahmood/clodr/issues"
+  },
   "license": "MIT"
 }
