@@ -1,0 +1,21 @@
+{
+  "name": "clodr",
+  "version": "1.0.0",
+  "description": "Clodr - manage all your Claude Code sessions from a single menu",
+  "type": "module",
+  "bin": {
+    "clodr": "bin/clodr.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "license": "MIT"
+}
