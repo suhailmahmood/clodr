@@ -1,6 +1,11 @@
 # Clodr
 
 [![npm](https://img.shields.io/npm/v/clodr-cli)](https://www.npmjs.com/package/clodr-cli)
+[![downloads](https://img.shields.io/npm/dm/clodr-cli)](https://www.npmjs.com/package/clodr-cli)
+[![node](https://img.shields.io/node/v/clodr-cli)](https://nodejs.org)
+[![license](https://img.shields.io/npm/l/clodr-cli)](LICENSE)
+
+![Clodr menu](https://raw.githubusercontent.com/suhailmahmood/clodr/master/docs/screenshot.png)
 
 Clodr - manage all your Claude Code sessions from a single menu.
 
