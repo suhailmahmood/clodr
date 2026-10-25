@@ -11,7 +11,6 @@ import { showSettings } from './ui/settings.js';
 import { createTerm } from './ui/term.js';
 import { T, RESET } from './ui/common.js';
 
-const CLEAR = '\x1b[2J\x1b[H';
 
 const runIn = (dir, args) => launchClaude(dir, args);
 
@@ -43,12 +42,16 @@ async function prepareProject(sel, term) {
 }
 
 // Leaves the menu screen, runs claude to completion, comes back to the menu screen.
+// Claude's exit chatter ("Resume this session with: ...") lands on the main screen, below the cursor. Nothing
+// is cleared (a clear pushes lines into scrollback): reserve a few blank lines, remember the cursor, and after
+// claude exits jump back and erase downwards, so the chatter vanishes without touching scrollback.
 // Returns why claude could not start (shown in the menu), or ''.
+const RESERVE = 5;
 async function runOutside(term, fn) {
   term.exitScreen();
-  term.write(CLEAR);                 // blank screen: claude starts clean, no old terminal text during its startup
+  term.write(`${'\n'.repeat(RESERVE)}\x1b[${RESERVE}A\x1b7`);   // newlines scroll if at the bottom; DECSC remembers the row
   term.stop();
-  try { return (await fn()).error || ''; } finally { term.start(); term.enterScreen(); }
+  try { return (await fn()).error || ''; } finally { term.write('\x1b8\x1b[J'); term.start(); term.enterScreen(); }
 }
 
 /** Interactive menu loop: pick, run claude, return to the (refreshed) menu until the user quits. */
