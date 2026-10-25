@@ -75,7 +75,7 @@ export async function readLine(term, row, width, prompt) {
     for (;;) {
       const k = await term.readKey();
       if (k.name === 'escape') return null;
-      if (k.name === 'enter') return text;
+      if (k.name === 'enter' || k.name === 'ctrl-enter') return text;
       if (k.name === 'backspace') { if (text) { text = text.slice(0, -1); term.write('\b \b'); } }
       else if (k.name === 'char' || k.name === 'space') { text += k.ch; term.write(k.ch); }
     }

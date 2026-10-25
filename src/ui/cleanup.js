@@ -66,7 +66,7 @@ export async function showCleanup(term, initial) {
       lines.push(numberedRow(i, `${box} ${c.title}: ${scan[c.id].length}${extra ? ` (${extra})` : ''}`, w, i === cur ? T.clay : why ? T.dim : T.gray));
     });
     if (running.length) lines.push('', `${T.yellow} Claude is running (${running.length} session(s)): close it to perform cleanup.${RESET}`);
-    lines.push('', hintLine('↑/↓ move | Space toggle | Enter review | Esc back', status, w));
+    lines.push('', hintLine('↑/↓ move | Space toggle | Enter review | Esc/Bksp back | ^C quit', status, w));
     paint(term, lines);
   };
 
@@ -88,7 +88,7 @@ export async function showCleanup(term, initial) {
     const k = await term.readKey(LIVE);
     status = '';
     const c = CATEGORIES[cur];
-    if (k.name === 'escape') return scan;
+    if (k.name === 'escape' || k.name === 'backspace') return scan;
     if (k.name === 'up' || k.name === 'down') cur = step(cur, CATEGORIES.length, k.name);
     else if (k.name === 'space') { if (!reason(c)) sel[c.id] = !sel[c.id]; }
     else if (k.name === 'enter') {

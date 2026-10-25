@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="834" height="564" viewBox="0 0 834 564" role="img" aria-label="Clodr menu">
+<rect width="834" height="564" rx="10" fill="#1b1f27"/>
+<rect width="834" height="36" rx="10" fill="#262b35"/><rect y="26" width="834" height="10" fill="#262b35"/>
+<circle cx="22" cy="18" r="6" fill="#ff5f56"/><circle cx="42" cy="18" r="6" fill="#ffbd2e"/><circle cx="62" cy="18" r="6" fill="#27c93f"/>
+<g font-family="Cascadia Mono, Consolas, Menlo, 'DejaVu Sans Mono', monospace" font-size="16" xml:space="preserve">
+<path d="M47.2 51H48.4Q42.4 51 42.4 57V62" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M47.2 51H56.800000000000004" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M56.8 51H66.39999999999999" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M80.8 40V62" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M123.99999999999999 51H125.19999999999999Q119.19999999999999 51 119.19999999999999 57V62" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M124 51H133.6" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M133.6 51H132.4Q138.4 51 138.4 57V62" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M162.4 51H157.60000000000002V62" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M162.4 51H172" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M172 51H170.8Q176.8 51 176.8 57V62" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M200.79999999999998 51H196V62" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M200.79999999999998 51H210.39999999999998" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M210.4 51H209.20000000000002Q215.20000000000002 51 215.20000000000002 57V62" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M42.4 62V84" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M80.8 62V84" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M119.19999999999999 62V84" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M138.4 62V84" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M157.60000000000002 62V84" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M176.8 62V84" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M196 62V84M196 73H200.79999999999998" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M200.79999999999998 73H210.39999999999998" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M210.4 73H209.20000000000002Q215.20000000000002 73 215.20000000000002 67V62" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M47.2 95H48.4Q42.4 95 42.4 89V84" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M47.2 95H56.800000000000004" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M56.8 95H66.39999999999999" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M85.6 95H86.8Q80.8 95 80.8 89V84" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M85.6 95H95.19999999999999" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M95.2 95H104.8" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M123.99999999999999 95H125.19999999999999Q119.19999999999999 95 119.19999999999999 89V84" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M124 95H133.6" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M133.6 95H132.4Q138.4 95 138.4 89V84" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M162.4 95H157.60000000000002V84" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M162.4 95H172" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M172 95H170.8Q176.8 95 176.8 89V84" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M196 84V106" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M211.70000000000002 89L218.70000000000002 101" stroke="rgb(217,119,87)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<text x="37.6 47.2 56.8 66.4 76.0 95.2 114.4 124.0 133.6 143.2 152.8 162.4 181.6 191.2 200.8 220.0 229.6 239.2 248.8 268.0 277.6 287.2 296.8 306.4 316.0 335.2 344.8 354.4 364.0 383.2 392.8 402.4 412.0 421.6 431.2 440.8 450.4 469.6 479.2 488.8 498.4 517.6 536.8 546.4 556.0 565.6 575.2 584.8 604.0 613.6 623.2 632.8" y="122" fill="rgb(190,190,190)">Clodr-manageallyourClaudeCodesessionsfromasinglemenu</text>
+<text x="37.6 47.2 56.8 66.4 76.0 85.6 95.2 104.8 114.4" y="166" fill="rgb(217,119,87)" font-weight="bold" text-decoration="underline">Workspace</text>
+<text x="152.8 162.4 172.0 181.6 191.2 200.8" y="166" fill="rgb(190,190,190)">Clones</text>
+<text x="239.2 248.8 258.4 268.0 277.6 287.2 296.8 306.4 316.0 325.6 344.8 354.4 364.0 373.6" y="166" fill="rgb(190,190,190)">Everythingelse</text>
+<path d="M58.099999999999994 177L65.1 189" stroke="rgb(120,120,120)" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<text x="37.6 47.2 66.4 76.0 85.6 95.2 104.8 114.4 124.0 133.6 143.2" y="188" fill="rgb(120,120,120)">D:Workspace</text>
+<text x="37.6 47.2 56.8 66.4 76.0 85.6 95.2" y="210" fill="rgb(190,190,190)">Search:</text>
+<text x="114.4 124.0 133.6 143.2 162.4 172.0 191.2 200.8 210.4 220.0 229.6 239.2" y="210" fill="rgb(120,120,120)">typetosearch</text>
+<text x="47.2 56.8 76.0 95.2 104.8 114.4 124.0 133.6" y="254" fill="rgb(217,119,87)">1.●Clodr</text>
+<text x="47.2 56.8" y="276" fill="rgb(190,190,190)">2.</text>
+<text x="76.0" y="276" fill="#3fc1a5">●</text>
+<text x="95.2 104.8 114.4 124.0 133.6 143.2 152.8 162.4 172.0 181.6 191.2 200.8" y="276" fill="rgb(190,190,190)">Payments-API</text>
+<text x="47.2 56.8" y="298" fill="rgb(190,190,190)">3.</text>
+<text x="76.0" y="298" fill="#3fc1a5">●</text>
+<text x="95.2 104.8 114.4 124.0 133.6 143.2 152.8 162.4 172.0 181.6 191.2 200.8 210.4" y="298" fill="rgb(190,190,190)">Blog-Redesign</text>
+<text x="47.2 56.8 95.2 104.8 114.4 124.0 133.6 143.2 152.8 162.4" y="320" fill="rgb(190,190,190)">4.Dotfiles</text>
+<text x="47.2 56.8" y="342" fill="rgb(190,190,190)">5.</text>
+<text x="76.0" y="342" fill="#3fc1a5">●</text>
+<text x="95.2 104.8 114.4 124.0 133.6 143.2 152.8 162.4 172.0 181.6 191.2 200.8 210.4 220.0" y="342" fill="rgb(190,190,190)">Invoice-Parser</text>
+<text x="47.2 56.8 95.2 104.8 114.4 124.0 133.6 143.2 152.8 162.4 172.0 181.6 191.2 200.8 210.4 220.0" y="364" fill="rgb(190,190,190)">6.Home-Lab-Notes</text>
+<text x="47.2 56.8" y="386" fill="rgb(190,190,190)">7.</text>
+<text x="76.0" y="386" fill="#3fc1a5">●</text>
+<text x="95.2 104.8 114.4 124.0 133.6 143.2 152.8 162.4 172.0 181.6 191.2 200.8" y="386" fill="rgb(190,190,190)">Chess-Engine</text>
+<text x="47.2 56.8 95.2 104.8 114.4 124.0 133.6 143.2 152.8 162.4 172.0 181.6 191.2 200.8" y="408" fill="rgb(190,190,190)">8.Weekend-Hack</text>
+<text x="47.2 56.8" y="430" fill="rgb(190,190,190)">9.</text>
+<text x="76.0" y="430" fill="#3fc1a5">●</text>
+<text x="95.2 104.8 114.4 124.0 133.6 143.2 152.8 162.4 172.0 181.6 191.2 200.8 210.4 220.0" y="430" fill="rgb(190,190,190)">Resume-Builder</text>
+<text x="37.6 47.2 56.8 95.2 104.8 114.4 124.0 133.6 143.2 152.8 162.4 172.0 181.6 191.2 200.8 210.4 220.0" y="452" fill="rgb(190,190,190)">10.Garden-Planner</text>
+<text x="28.0 37.6 47.2 56.8 66.4 85.6 95.2 104.8 114.4 124.0 133.6 143.2 152.8 172.0 191.2 210.4 220.0 229.6 248.8 258.4 268.0 277.6 287.2 296.8 306.4 325.6 344.8 364.0 373.6 383.2 392.8 402.4 412.0 421.6 440.8 460.0 479.2 488.8 498.4 508.0 517.6 527.2" y="496" fill="rgb(190,190,190)">Entercontinue|nnewsession|eexplore|ddelete</text>
+<text x="28.0 37.6 47.2 66.4 76.0 85.6 104.8 124.0 133.6 143.2 162.4 172.0 181.6 191.2 210.4 229.6 239.2 258.4 268.0 277.6 296.8 306.4 316.0 325.6 335.2 344.8 354.4 373.6 392.8 402.4 421.6 431.2 440.8 450.4 460.0 469.6 479.2 488.8 508.0 527.2 536.8 556.0 565.6 575.2 584.8 604.0 623.2 642.4 661.6 671.2 680.8 700.0 709.6 719.2 728.8 738.4 748.0 757.6 767.2 776.8 786.4" y="518" fill="rgb(190,190,190)">←/→tab|↑/↓move|^Nnewproject|^Ssettings|^Cquit|●=hassession(s)</text>
+</g>
+</svg>

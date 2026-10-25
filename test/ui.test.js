@@ -4,11 +4,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { sandbox, addSession, mkdirs, fakeTerm, stubClaude } from './helpers.js';
 import { getConfig, saveConfig } from '../src/config.js';
+import { runMenu } from '../src/app.js';
 import { selectEntry } from '../src/ui/menu.js';
 import { showSettings } from '../src/ui/settings.js';
 import { showWorkspaces } from '../src/ui/workspaces.js';
 import { scanCleanup, planOrphans, executeCleanup, runningSessions } from '../src/cleanup.js';
-import { purgeSupported } from '../src/claude.js';
+import { purgeSupported, launchClaude } from '../src/claude.js';
 import { renderTabs } from '../src/ui/tabs.js';
 import { claudeJsonPath } from '../src/paths.js';
 
@@ -29,50 +30,76 @@ after(() => sb.cleanup());
 
 const menu = (term, view = '', extra = {}) => selectEntry(term, { workspaces: [{ path: sb.root }], view, ...extra });
 
-test('menu: newest first, Enter selects', async () => {
-  const t = fakeTerm().press('enter');
+test('menu: newest first, Enter continues, ctrl-enter / n start new', async () => {
+  const t = fakeTerm().press('down', 'enter');
   const r = await menu(t);
-  assert.deepEqual(r, { kind: 'folder', path: path.join(sb.root, 'Alpha') });
+  assert.deepEqual(r, { kind: 'folder', path: path.join(sb.root, 'Alpha'), mode: 'continue' });
+  assert.deepEqual(await menu(fakeTerm().press('down', 'ctrl-enter')), { kind: 'folder', path: path.join(sb.root, 'Alpha'), mode: 'new' });
+  assert.deepEqual(await menu(fakeTerm().press('down', 'n')), { kind: 'folder', path: path.join(sb.root, 'Alpha'), mode: 'new' });
   assert.match(t.text, /1\. ●\s*Alpha/);
   assert.match(t.text, /2\.\s+Beta/);
 });
 
-test('menu: digits jump, arrows wrap, Esc/q quit', async () => {
-  assert.deepEqual(await menu(fakeTerm().press('2', 'enter')), { kind: 'folder', path: path.join(sb.root, 'Beta') });
-  assert.deepEqual(await menu(fakeTerm().press('up', 'enter')), { kind: 'folder', path: path.join(sb.root, 'Beta') });
-  assert.equal(await menu(fakeTerm().press('q')), null);
-  assert.equal(await menu(fakeTerm().press('q')), null);
+test('menu: down wraps, q quits from the list', async () => {
+  const beta = { kind: 'folder', path: path.join(sb.root, 'Beta'), mode: 'continue' };
+  assert.deepEqual(await menu(fakeTerm().press('down', 'down', 'enter')), beta);
+  assert.deepEqual(await menu(fakeTerm().press('down', 'down', 'down', 'down', 'enter')), beta);
+  assert.deepEqual(await menu(fakeTerm().press('down', 'ctrl-s')), { kind: 'settings' });
 });
 
-test('menu: n asks for a project name, s opens settings', async () => {
-  assert.deepEqual(await menu(fakeTerm().press('n').type('hi there').press('enter')), { kind: 'new', name: 'hi there', root: sb.root });
-  assert.equal(await menu(fakeTerm().press('n', 'escape', 'q')), null);
-  assert.deepEqual(await menu(fakeTerm().press('s')), { kind: 'settings' });
+test('menu: search field takes letters; starts-with before contains, case-insensitive', async () => {
+  const d = mkdirs(path.join(sb.root, 'zeta-alpha'))[0];
+  const t = fakeTerm().type('ALP').press('down', 'enter');
+  assert.deepEqual(await menu(t), { kind: 'folder', path: path.join(sb.root, 'Alpha'), mode: 'continue' });   // starts-with first
+  assert.deepEqual(await menu(fakeTerm().type('alp').press('down', 'down', 'enter')), { kind: 'folder', path: d, mode: 'continue' });
+  assert.deepEqual(await menu(fakeTerm().type('alp').press('enter', 'ctrl-s')), { kind: 'settings' });   // Enter in the search field does nothing
+  const f = fakeTerm().type('bet').press('ctrl-s');
+  await menu(f);
+  assert.match(f.frames[3], /Beta/);                                  // frame after the 3rd typed letter: filtered
+  assert.doesNotMatch(f.frames[3], /Alpha/);
+  const x = fakeTerm().type('alpq').press('backspace', 'escape', 'ctrl-s');
+  assert.deepEqual(await menu(x), { kind: 'settings' });                                  // letters typed in search never act as shortcuts
+  fs.rmSync(d, { recursive: true });
+});
+
+test('menu: down with no match stays in search; Backspace in the list returns to search', async () => {
+  const t = fakeTerm().type('zzz').press('down', 'ctrl-s');
+  await menu(t);
+  assert.match(t.last, /Type to search/);
+  assert.deepEqual(await menu(fakeTerm().press('down', 'backspace', 'e', 'ctrl-s')), { kind: 'settings' });   // 'e' typed into search, not explore
+});
+
+test('menu: p asks for a project name, s opens settings', async () => {
+  assert.deepEqual(await menu(fakeTerm().press('down', 'p').type('hi there').press('enter')), { kind: 'new', name: 'hi there', root: sb.root });
+  assert.deepEqual(await menu(fakeTerm().press('down', 'p', 'escape', 'ctrl-s')), { kind: 'settings' });
+  assert.deepEqual(await menu(fakeTerm().press('down', 's')), { kind: 'settings' });
+  assert.deepEqual(await menu(fakeTerm().press('ctrl-s')), { kind: 'settings' });          // chords work from the search field too
+  assert.deepEqual(await menu(fakeTerm().press('ctrl-n').type('y').press('enter')), { kind: 'new', name: 'y', root: sb.root });
 });
 
 test('menu: tab switch is remembered; Everything else lists outside folders', async () => {
-  const t = fakeTerm().press('right', 'enter');
-  assert.deepEqual(await menu(t), { kind: 'folder', path: proj });
+  const t = fakeTerm().press('right', 'down', 'enter');
+  assert.deepEqual(await menu(t), { kind: 'folder', path: proj, mode: 'continue' });
   assert.equal(getConfig().view, 'else');
   assert.match(t.text, /Everything else/);
   assert.match(t.text, /proj/);
   saveConfig({ workspaces: [{ path: sb.root }], view: '' });
 });
 
-test('menu: o opens the selected folder', async () => {
+test('menu: e explores the selected folder', async () => {
   const opened = [];
-  await menu(fakeTerm().press('o', 'q'), '', { openFolder: (p) => opened.push(p) });
+  await menu(fakeTerm().press('down', 'e', 'ctrl-s'), '', { openFolder: (p) => opened.push(p) });
   assert.deepEqual(opened, [path.join(sb.root, 'Alpha')]);
 });
 
 test('menu: delete asks y/N, n keeps, y removes folder + sessions', async () => {
   const d = mkdirs(path.join(sb.root, 'Doomed'))[0];
   const pd = addSession(sb.claude, d, { ageH: 0 });
-  let t = fakeTerm().press('d', 'n', 'q');
+  let t = fakeTerm().press('down', 'd', 'n', 'ctrl-s');
   await menu(t);
   assert.equal(fs.existsSync(d), true);
   assert.match(t.text, /Delete 'Doomed' and 1 Claude session\(s\)\?/);
-  t = fakeTerm().press('d', 'y', 'q');
+  t = fakeTerm().press('down', 'd', 'y', 'ctrl-s');
   await menu(t);
   assert.equal(fs.existsSync(d), false);
   assert.equal(fs.existsSync(pd), false);
@@ -82,7 +109,7 @@ test('menu: delete asks y/N, n keeps, y removes folder + sessions', async () => 
 test('menu: projects delete keeps the folder', async () => {
   const d = mkdirs(path.join(sb.base, 'code', 'p2'))[0];
   const pd = addSession(sb.claude, d, { ageH: 0 });
-  const t = fakeTerm().press('delete', 'y', 'q');
+  const t = fakeTerm().press('down', 'd', 'y', 'ctrl-s');
   await menu(t, 'else');
   assert.equal(fs.existsSync(d), true);
   assert.equal(fs.existsSync(pd), false);
@@ -92,7 +119,7 @@ test('menu: projects delete keeps the folder', async () => {
 test('menu: empty views show a hint', async () => {
   const empty = path.join(sb.base, 'empty-ws');
   fs.mkdirSync(empty);
-  const t = fakeTerm().press('q');
+  const t = fakeTerm().press('down', 'ctrl-s');
   await selectEntry(t, { workspaces: [{ path: empty }], view: '' });
   assert.match(t.text, /No projects yet/);
 });
@@ -117,10 +144,10 @@ test('workspaces: add workspace with name, rename, reorder, remove', async () =>
   await showWorkspaces(t);
   assert.equal(getConfig().workspaces[0].name, undefined);
 
-  t = fakeTerm().press('delete', 'n', 'escape');
+  t = fakeTerm().press('d', 'n', 'escape');
   await showWorkspaces(t);
   assert.equal(getConfig().workspaces.length, 2);
-  t = fakeTerm().press('delete', 'y', 'escape');
+  t = fakeTerm().press('d', 'y', 'escape');
   await showWorkspaces(t);
   assert.deepEqual(getConfig().workspaces, [{ path: sb.root }]);
   assert.equal(fs.existsSync(next), true);                  // folder kept
@@ -144,9 +171,27 @@ test('settings: Manage workspaces opens the workspaces page', async () => {
   assert.match(t.text, /Manage workspaces/);
 });
 
+test('runMenu: git prompt stays on the menu screen; menu comes back after claude exits', async () => {
+  const before = stub.log().length;
+  const t = fakeTerm().press('ctrl-n').type('Fresh Proj').press('enter', 'n').type('Alpha').press('down', 'enter');   // new project, no git; then find and continue Alpha
+  await assert.rejects(runMenu(t), /ran out of keys/);                     // back at the menu, waiting for a key
+  assert.match(t.text, /Initialize git in Fresh-Proj\? \[Y\/n\]/);
+  assert.equal(fs.existsSync(path.join(sb.root, 'Fresh-Proj', '.git')), false);
+  assert.ok(stub.log().slice(before).includes('-r'));
+});
+
+test('launch failure comes back as an error and shows in the menu status row', async () => {
+  const gone = path.join(sb.base, 'no-such-folder');
+  const r = await launchClaude(gone);
+  assert.equal(r.error, `Folder not found: ${gone}`);
+  const t = fakeTerm().press('ctrl-s');
+  await menu(t, '', { status: r.error });
+  assert.match(t.frames[0], /Folder not found/);
+});
+
 test('menu: crowded tab bar scrolls around the active tab', async () => {
   const workspaces = Array.from({ length: 12 }, (_, i) => ({ path: path.join(sb.base, `w${i}`), name: `Workspace-${i}` }));
-  const t = fakeTerm({ width: 60 }).press('left', 'left', 'q');          // wraps to the last tab, then back one
+  const t = fakeTerm({ width: 60 }).press('left', 'left', 'down', 'ctrl-s');          // wraps to the last tab, then back one
   await selectEntry(t, { workspaces, view: '' });
   const bar = t.text.split(/\r?\n/).find((l) => l.includes('Everything else'));
   assert.ok(bar.length <= 60);
@@ -159,14 +204,14 @@ test('menu: two workspaces + nested exclusion', async () => {
   const repo = mkdirs(path.join(clones, 'r1'))[0];
   addSession(sb.claude, repo, { ageH: 0 });
   const workspaces = [{ path: sb.root, name: 'Main' }, { path: clones }];
-  let t = fakeTerm().press('q');
+  let t = fakeTerm().press('down', 'ctrl-s');
   await selectEntry(t, { workspaces, view: '' });
   assert.match(t.text, /Main\s+Clones\s+Everything else/);
   assert.doesNotMatch(t.text, /r1/);
-  t = fakeTerm().press('right', 'enter');
-  assert.deepEqual(await selectEntry(t, { workspaces, view: '' }), { kind: 'folder', path: repo });
-  assert.deepEqual(await selectEntry(fakeTerm().press('n').type('x').press('enter'), { workspaces, view: clones }), { kind: 'new', name: 'x', root: clones });
-  assert.match((t = fakeTerm().press('left', 'n', 'q'), await selectEntry(t, { workspaces, view: '' }), t.text), /Switch to a workspace tab/);
+  t = fakeTerm().press('right', 'down', 'enter');
+  assert.deepEqual(await selectEntry(t, { workspaces, view: '' }), { kind: 'folder', path: repo, mode: 'continue' });
+  assert.deepEqual(await selectEntry(fakeTerm().press('down', 'p').type('x').press('enter'), { workspaces, view: clones }), { kind: 'new', name: 'x', root: clones });
+  assert.match((t = fakeTerm().press('left', 'down', 'p', 'ctrl-s'), await selectEntry(t, { workspaces, view: '' }), t.text), /Switch to a workspace tab/);
   reset();
 });
 

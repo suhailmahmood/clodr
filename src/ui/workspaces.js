@@ -14,7 +14,7 @@ export async function showWorkspaces(term) {
   let status = '';
   let footerRow = 0;
 
-  const rows = () => list.map((w) => `${wsName(w)}: ${w.path}`);
+  const rows = () => list.map((w) => `${wsName(w)} - ${w.path}`);
 
   const draw = () => {
     const w = term.width - 1;
@@ -23,7 +23,7 @@ export async function showWorkspaces(term) {
     if (!list.length) lines.push(`${T.dim} No workspaces yet. Press a to add one.${RESET}`);
     lines.push('');
     footerRow = lines.length;
-    lines.push(hintLine(list.length ? '↑/↓ move | Ctrl+↑/↓ reorder | Enter rename | Del/d remove | a add | Esc back' : 'a add | Esc back', status, w));
+    lines.push(hintLine(list.length ? '↑/↓ move | Ctrl+↑/↓ reorder | Enter rename | d remove | a add | Esc/Bksp back | ^C quit' : 'a add | Esc/Bksp back | ^C quit', status, w));
     paint(term, lines);
   };
 
@@ -53,7 +53,7 @@ export async function showWorkspaces(term) {
     const have = list.length > 0;
     const c = k.name === 'char' ? k.ch.toLowerCase() : '';
     if (k.name === 'up' || k.name === 'down') cur = step(cur, list.length, k.name);
-    else if (k.name === 'escape') return;
+    else if (k.name === 'escape' || k.name === 'backspace') return;
     else if (c === 'a') await addWorkspace();
     else if (have && (k.name === 'ctrl-up' || k.name === 'ctrl-down')) {
       const to = cur + (k.name === 'ctrl-up' ? -1 : 1);
@@ -62,7 +62,7 @@ export async function showWorkspaces(term) {
         cur = to;
         save();
       }
-    } else if (have && (k.name === 'delete' || c === 'd')) {
+    } else if (have && c === 'd') {
       const w = list[cur];
       if (await confirm(term, footerRow, term.width - 1, `Remove workspace '${wsName(w)}'? Its folder is kept. [y/N] `)) {
         list.splice(cur, 1);

@@ -9,61 +9,54 @@ import { initGit } from './git.js';
 import { selectEntry } from './ui/menu.js';
 import { showSettings } from './ui/settings.js';
 import { createTerm } from './ui/term.js';
+import { T, RESET } from './ui/common.js';
 
-// After claude exits, tell the shell wrapper where to cd (it sets CLODR_CWDFILE).
-function leaveShellIn(dir) {
-  if (process.env.CLODR_CWDFILE) {
-    try { fs.writeFileSync(process.env.CLODR_CWDFILE, dir); } catch { /* shell just stays put */ }
+const CLEAR = '\x1b[2J\x1b[H';
+
+const runIn = (dir, args) => launchClaude(dir, args);
+
+export const resumeIn = (dir) => runIn(dir, hasSession(dir) ? ['-r'] : []);   // no session: start a new one
+
+export const newSessionIn = (dir) => runIn(dir, []);
+
+// Yes/no on the bottom row of the current screen. Enter or y = yes, n = no.
+async function askYesNo(term, text) {
+  const w = term.width - 1;
+  term.cursor(term.height - 1);
+  term.write(`${T.yellow}${text.slice(0, w).padEnd(w)}${RESET}`);
+  for (;;) {
+    const k = await term.readKey();
+    if (k.name === 'enter' || k.ch === 'y' || k.ch === 'Y') return true;
+    if (k.ch === 'n' || k.ch === 'N') return false;
   }
 }
 
-async function runIn(dir, args) {
-  const code = await launchClaude(dir, args);
-  leaveShellIn(dir);
-  return code;
-}
-
-export async function resumeIn(dir) {
-  if (hasSession(dir)) return runIn(dir, ['-r']);
-  console.log(`\x1b[33mNo session in ${dir}, starting new\x1b[0m`);
-  return runIn(dir, []);
-}
-
-// One key from the raw terminal, outside any alt screen.
-async function askKey(term, text) {
-  term.write(text);
-  term.start();
-  const k = await term.readKey();
-  term.stop();
-  term.write('\n');
-  return k.ch;
-}
-
-async function newProject(sel, term) {
+// Creates the project folder (asking about git on the menu screen) and returns its path, or null.
+async function prepareProject(sel, term) {
   const name = kebabName(sel.name);
-  if (!name) { console.warn('Empty project name'); return 1; }
+  if (!name) return null;
   const dir = path.join(sel.root, name);
   const isNew = !fs.existsSync(dir);
   fs.mkdirSync(dir, { recursive: true });
-  if (isNew) {
-    const ans = await askKey(term, `Initialize git in ${name}? [Y/n] `);
-    if (ans !== 'n' && ans !== 'N') initGit(dir);
-  }
-  return runIn(dir, []);
+  if (isNew && await askYesNo(term, `Initialize git in ${name}? [Y/n] `)) initGit(dir);
+  return dir;
 }
 
-// What the menu can ask for once it closes, by result kind. (Settings is a page inside the menu loop.)
-const ACTIONS = {
-  folder: (sel) => resumeIn(sel.path),
-  new: newProject,
-};
+// Leaves the menu screen, runs claude to completion, comes back to the menu screen.
+// Returns why claude could not start (shown in the menu), or ''.
+async function runOutside(term, fn) {
+  term.exitScreen();
+  term.write(CLEAR);                 // blank screen: claude starts clean, no old terminal text during its startup
+  term.stop();
+  try { return (await fn()).error || ''; } finally { term.start(); term.enterScreen(); }
+}
 
-/** Interactive menu loop. */
+/** Interactive menu loop: pick, run claude, return to the (refreshed) menu until the user quits. */
 export async function runMenu(term = createTerm()) {
   getConfig();                                 // a config warning prints here, before the screen takes over
-  let sel;
   term.start();
   term.enterScreen();                          // one alt screen for every page
+  let status = '';
   try {
     for (;;) {
       const cfg = getConfig();                 // re-read each pass: Settings may have changed it
@@ -71,12 +64,16 @@ export async function runMenu(term = createTerm()) {
         if (!isDir(path.dirname(w.path))) continue;     // parent missing (unplugged drive): do not build the tree
         try { fs.mkdirSync(w.path, { recursive: true }); } catch { /* not writable */ }
       }
-      sel = await selectEntry(term, { workspaces: cfg.workspaces, view: cfg.view });
+      const sel = await selectEntry(term, { workspaces: cfg.workspaces, view: cfg.view, status });
+      status = '';
       if (!sel) return 0;
       if (sel.kind === 'settings') { await showSettings(term); continue; }
-      break;
+      if (sel.kind === 'new') {
+        const dir = await prepareProject(sel, term);
+        if (dir) status = await runOutside(term, () => runIn(dir, []));
+      } else {
+        status = await runOutside(term, () => (sel.mode === 'new' ? newSessionIn(sel.path) : resumeIn(sel.path)));
+      }
     }
   } finally { term.exitScreen(); term.stop(); }
-
-  return ACTIONS[sel.kind](sel, term);
 }

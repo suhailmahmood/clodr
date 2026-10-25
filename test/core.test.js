@@ -9,7 +9,6 @@ import { parseKeys } from '../src/ui/term.js';
 import { getConfig, saveConfig, nestedIn } from '../src/config.js';
 import { globalFolders, workspaceFolders, outsideFolders, STATE, removeFolder, removeSessions, hasSession, sessionCount } from '../src/sessions.js';
 import { derivePath, parsePurgeOutput } from '../src/cleanup.js';
-import { upsertBlock, removeBlock } from '../src/setup.js';
 
 let sb;
 before(() => { sb = sandbox(); });
@@ -156,20 +155,6 @@ Dry run: 5 item(s) would be deleted.`;
   assert.deepEqual(parsePurgeOutput('nothing').items, []);
 });
 
-test('shell block insert is idempotent and removable', () => {
-  const f = path.join(sb.base, 'rc', '.bashrc');
-  fs.mkdirSync(path.dirname(f), { recursive: true });
-  fs.writeFileSync(f, 'export A=1\n');
-  upsertBlock(f, 'bash');
-  upsertBlock(f, 'bash');
-  const t = fs.readFileSync(f, 'utf8');
-  assert.equal(t.split('# >>> clodr >>>').length, 2);
-  assert.ok(t.startsWith('export A=1\n'));
-  assert.equal(removeBlock(f), true);
-  assert.equal(fs.readFileSync(f, 'utf8').trim(), 'export A=1');
-  assert.equal(removeBlock(f), false);
-});
-
 test('removeFolder works when our own cwd is inside the folder', () => {
   const d = mkdirs(path.join(sb.root, 'Held', 'sub'))[0];
   const before = process.cwd();
@@ -185,18 +170,6 @@ test('removeFolder refuses to delete a folder that holds a workspace', () => {
   assert.match(removeFolder(path.join(sb.root, 'Outer'), sb.root, [inner]), /^Refusing: workspace .* is inside it/);
   assert.equal(fs.existsSync(inner), true);
   assert.equal(removeFolder(path.join(sb.root, 'Outer'), sb.root), null);
-});
-
-test('shell block is replaced where it stands', () => {
-  const f = path.join(sb.base, 'rc', '.zshrc');
-  fs.mkdirSync(path.dirname(f), { recursive: true });
-  fs.writeFileSync(f, 'export A=1\n');
-  upsertBlock(f, 'bash');
-  fs.appendFileSync(f, 'export B=2\n');
-  const once = fs.readFileSync(f, 'utf8');
-  upsertBlock(f, 'bash');
-  assert.equal(fs.readFileSync(f, 'utf8'), once);
-  assert.ok(once.endsWith('export B=2\n'));
 });
 
 test('package.json and README carry the tagline', () => {

@@ -28,7 +28,7 @@ export async function showSettings(term) {
     const w = term.width - 1;
     const lines = header('Settings');
     PAGES.forEach((p, i) => lines.push(numberedRow(i, p.label(state), w, i === cur ? T.clay : T.gray)));
-    lines.push('', hintLine('↑/↓ move | Enter open | Esc back', '', w));
+    lines.push('', hintLine('↑/↓ move | Enter open | Esc/Bksp back | ^C quit', '', w));
     paint(term, lines);
   };
 
@@ -36,7 +36,7 @@ export async function showSettings(term) {
   for (;;) {
     const k = await term.readKey(LIVE);
     if (k.name === 'up' || k.name === 'down') cur = step(cur, PAGES.length, k.name);
-    else if (k.name === 'escape') return;
+    else if (k.name === 'escape' || k.name === 'backspace') return;
     else if (k.name === 'enter') await PAGES[cur].run(term, state);
     draw();
   }

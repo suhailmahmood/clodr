@@ -5,7 +5,7 @@ const ESC = '\x1b';
 // readKey option for screens that redraw: also wakes on a terminal resize ({name:'resize'}).
 export const LIVE = { live: true };
 
-// Parses raw stdin chunks into {name, ch}. name: up down ctrl-up ctrl-down left right home end pageup pagedown delete enter escape backspace space ctrl-c char unknown
+// Parses raw stdin chunks into {name, ch}. name: up down ctrl-up ctrl-down left right home end pageup pagedown delete enter ctrl-enter ctrl-<letter> escape backspace space ctrl-c char unknown
 export function parseKeys(chunk) {
   const keys = [];
   let i = 0;
@@ -33,11 +33,12 @@ export function parseKeys(chunk) {
     const cp = chunk.codePointAt(i);
     const s = String.fromCodePoint(cp);
     i += s.length;
-    if (s === '\r' || s === '\n') keys.push({ name: 'enter', ch: s });
+    if (s === '\r') keys.push({ name: 'enter', ch: s });
+    else if (s === '\n') keys.push({ name: 'ctrl-enter', ch: s });   // Ctrl+Enter (= Ctrl+J) is LF where the terminal tells it from Enter
     else if (s === '\x7f' || s === '\b') keys.push({ name: 'backspace', ch: s });
     else if (s === ' ') keys.push({ name: 'space', ch: s });
     else if (s === '\x03') keys.push({ name: 'ctrl-c', ch: s });
-    else if (cp < 32) keys.push({ name: 'unknown', ch: '' });
+    else if (cp < 32) keys.push({ name: `ctrl-${String.fromCharCode(cp + 96)}`, ch: '' });   // Ctrl+letter = one control byte: ^N = 0x0E
     else keys.push({ name: 'char', ch: s });
   }
   return keys;

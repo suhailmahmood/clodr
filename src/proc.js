@@ -54,15 +54,19 @@ export function run(cmd, args) {
   });
 }
 
-// Runs cmd in cwd with inherited stdio; resolves with its exit code (1 if it cannot start).
+// Runs cmd in cwd with inherited stdio. Resolves {code, error}: error = why it could not start (nothing is printed).
 export function launch(cmd, args, cwd) {
   const exe = which(cmd);
-  if (!exe) { console.error(`${cmd} not found on PATH`); return Promise.resolve(1); }
+  if (!exe) return Promise.resolve({ code: 1, error: `${cmd} not found on PATH` });
+  if (cwd && !fs.existsSync(cwd)) return Promise.resolve({ code: 1, error: `Folder not found: ${cwd}` });
   return new Promise((resolve) => {
     let s;
-    try { s = spawnSpec(exe, args); } catch (e) { console.error(e.message); resolve(1); return; }
+    try { s = spawnSpec(exe, args); } catch (e) { resolve({ code: 1, error: e.message }); return; }
+    const ignore = () => {};              // Ctrl+C belongs to the child while it runs: do not let it kill us too
+    process.on('SIGINT', ignore);
+    const done = (r) => { process.off('SIGINT', ignore); resolve(r); };
     const p = spawn(s.cmd, s.args, { cwd, stdio: 'inherit', shell: s.shell });
-    p.on('error', (e) => { console.error(e.message); resolve(1); });
-    p.on('close', (code) => resolve(code ?? 0));
+    p.on('error', (e) => done({ code: 1, error: e.message }));
+    p.on('close', (code) => done({ code: code ?? 0 }));
   });
 }

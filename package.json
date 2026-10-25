@@ -1,6 +1,6 @@
 {
   "name": "clodr-cli",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Clodr - manage all your Claude Code sessions from a single menu",
   "type": "module",
   "bin": {
@@ -15,7 +15,8 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "screenshot": "node screenshots/generate.mjs"
   },
   "keywords": [
     "claude",

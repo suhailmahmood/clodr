@@ -8,25 +8,29 @@ import { T, RESET, header, hintLine, fit, step, paint, confirm, readLine } from 
 import { renderTabs } from './tabs.js';
 import { LIVE } from './term.js';
 
-const HINT = '←/→ tab | ↑/↓ move | Enter select | digits jump | n new | o open | s settings | Del/d delete | q quit | ● = session';
+// Two hint lines. Row 1 = what acts on a project; row 2 = navigation and global. Search focus types; list focus runs one-key actions.
+const HINT_SEARCH = ['Type to search | Esc clear | ↓ choose a project', '←/→ tab | ↑/↓ move | ^N new project | ^S settings | ^C quit | ● = has session(s)'];
+const HINT_LIST = ['Enter continue | n new session | e explore | d delete', '←/→ tab | ↑/↓ move | ^N new project | ^S settings | ^C quit | ● = has session(s)'];
 
 /**
  * Main menu: one tab per workspace, then "Everything else".
- * Resolves to {kind:'folder',path} | {kind:'new',name,root} | {kind:'settings'} | null (quit).
+ * Resolves to {kind:'folder',path,mode:'continue'|'new'} | {kind:'new',name,root} | {kind:'settings'} | null (quit).
  * @param {object} term
- * @param {{workspaces:{path:string,name?:string}[], view?:string, openFolder?:(p:string)=>void}} opts
+ * @param {{workspaces:{path:string,name?:string}[], view?:string, status?:string, openFolder?:(p:string)=>void}} opts
  */
-export async function selectEntry(term, { workspaces, view = '', openFolder = defaultOpen }) {
+export async function selectEntry(term, { workspaces, view = '', status: initialStatus = '', openFolder = defaultOpen }) {
   const tabs = [...workspaces.map((w, i) => ({ id: `w${i}`, ws: w, label: wsName(w) })), { id: ELSE, ws: null, label: 'Everything else' }];
   let tab = Math.max(0, tabs.findIndex((t) => (t.ws ? pathKey(t.ws.path) === pathKey(view) : view === ELSE)));   // unknown view: first tab
   const cache = {};                       // tab id -> folder list, loaded on first visit
   let all = null;                         // one scan of every session dir serves every tab
-  let items = [];
+  let base = [];                          // every folder of the tab
+  let items = [];                         // base filtered by the search text
+  let query = '';
+  let focus = 'search';                   // 'search' | 'list'
   let leafLen = 0;
   let cur = 0;
   let off = 0;
-  let buf = '';
-  let status = '';
+  let status = initialStatus;
   let page = 3;
   let footerRow = 0;
 
@@ -37,13 +41,27 @@ export async function selectEntry(term, { workspaces, view = '', openFolder = de
       all ??= globalFolders();
       cache[id()] = ws() ? workspaceFolders(ws().path, all, nestedIn(workspaces, ws())) : outsideFolders(workspaces.map((w) => w.path), all);
     }
-    items = cache[id()].map((f) => ({
+    base = cache[id()].map((f) => ({
       name: f.name, leaf: ws() ? '' : f.leaf, parent: ws() ? '' : f.parent,
       path: f.path, projDir: f.projDir, session: f.sessions > 0,
     }));
-    leafLen = ws() ? 0 : Math.max(0, ...items.map((i) => i.leaf.length));
-    cur = 0; off = 0; buf = '';
+    leafLen = ws() ? 0 : Math.max(0, ...base.map((i) => i.leaf.length));
+    query = ''; focus = 'search';
+    refilter();
   };
+
+  // Case-insensitive: names starting with the text first, then the rest that contain it. Order within each group is kept.
+  function refilter() {
+    const q = query.toLowerCase();
+    if (!q) items = base;
+    else {
+      const key = (i) => (i.leaf || i.name).toLowerCase();
+      const hay = (i) => `${i.name} ${i.leaf} ${i.parent}`.toLowerCase();
+      const starts = base.filter((i) => key(i).startsWith(q));
+      items = [...starts, ...base.filter((i) => !starts.includes(i) && hay(i).includes(q))];
+    }
+    cur = 0; off = 0;
+  }
   load();
 
   // One frame. Layout-dependent values (page size, footer row) are derived here from what is drawn.
@@ -53,11 +71,13 @@ export async function selectEntry(term, { workspaces, view = '', openFolder = de
     lines.push(renderTabs(tabs.map((t) => t.label), tab, w));
     const tag = ws() ? ws().path : 'All Claude Code sessions outside your workspaces';
     const empty = items.length ? ''
-      : ws() ? 'No projects yet. Press n to start one.'
+      : query ? 'No match.'
+      : ws() ? 'No projects yet. Press p to start one.'
       : 'Nothing here yet. Run claude in any folder and it shows up here.';
-    lines.push(`${T.dim} ${tag}${RESET}`, `${T.dim} ${empty}${RESET}`);
+    const box = focus === 'search' ? `${query}${T.clay}█${RESET}` : query || `${T.dim}type to search${RESET}`;
+    lines.push(`${T.dim} ${tag}${RESET}`, `${T.gray} Search: ${box}${RESET}`, `${T.dim} ${empty}${RESET}`);
 
-    page = Math.max(3, Math.min(items.length, term.height - lines.length - 3));   // rows: list + blank + hint
+    page = Math.max(3, Math.min(items.length, term.height - lines.length - 4));   // rows: list + blank + 2 hint lines
     cur = Math.min(cur, Math.max(0, items.length - 1));
     off = Math.max(0, Math.min(off, items.length - page));
     if (cur < off) off = cur; else if (cur >= off + page) off = cur - page + 1;
@@ -74,7 +94,7 @@ export async function selectEntry(term, { workspaces, view = '', openFolder = de
       rest = fit(rest, w - prefix.length - 1);                                   // 1 = session mark column
       const lead = it.leaf ? rest.slice(0, Math.max(leaf.length, leafW) + 1) : rest;
       const tail = rest.slice(lead.length);
-      if (i === cur) {
+      if (i === cur && focus === 'list') {
         lines.push(`${T.clay}${prefix}${it.session ? '●' : ' '}${lead}${tail}${RESET}`);   // orange text, no background
       } else {
         const mark = it.session ? `${T.cyan}●${T.gray}` : ' ';
@@ -82,14 +102,17 @@ export async function selectEntry(term, { workspaces, view = '', openFolder = de
       }
     }
     lines.push('');
-    footerRow = lines.length;
-    lines.push(hintLine(HINT, status, w));
+    const [h1, h2] = focus === 'search' ? HINT_SEARCH : HINT_LIST;
+    lines.push(hintLine(h1, '', w));
+    footerRow = lines.length;                // prompts and status take the second hint line
+    lines.push(hintLine(h2, status, w));
     paint(term, lines);
   };
 
   const prune = (it) => {                  // workspace tab: deleting a folder also drops the deeper session folders under it
     const survives = (p) => (ws() ? relPath(p, it.path) === null : pathKey(p) !== pathKey(it.path));
     cache[id()] = cache[id()].filter((f) => survives(f.path));
+    base = base.filter((x) => survives(x.path));
     items = items.filter((x) => survives(x.path));
   };
 
@@ -111,36 +134,48 @@ export async function selectEntry(term, { workspaces, view = '', openFolder = de
   for (;;) {
     const k = await term.readKey(LIVE);
     status = '';
-    if (!/^\d$/.test(k.ch)) buf = '';                      // a multi-digit jump ends at the first other key
     const last = Math.max(0, items.length - 1);
     let wantDelete = false;
     let wantNew = false;
-    const c = k.name === 'char' ? k.ch.toLowerCase() : '';
+    const inList = focus === 'list';
+    const c = k.name === 'char' && inList ? k.ch.toLowerCase() : '';
+    const pick = (mode) => ({ kind: 'folder', path: items[cur].path, mode });
     switch (k.name) {
-      case 'up': case 'down': cur = step(cur, items.length, k.name); break;
-      case 'home': cur = 0; break;
-      case 'end': cur = last; break;
-      case 'pageup': cur = Math.max(0, cur - page); break;
-      case 'pagedown': cur = Math.min(last, cur + page); break;
-      case 'enter': if (items.length) return { kind: 'folder', path: items[cur].path }; break;
-      case 'delete': wantDelete = true; break;
+      case 'down':
+        if (!inList) { if (items.length) { focus = 'list'; cur = 0; } } else cur = step(cur, items.length, 'down');
+        break;
+      case 'up':
+        if (inList && cur === 0) focus = 'search';
+        else if (inList) cur--;
+        break;
+      case 'home': if (inList) cur = 0; break;
+      case 'end': if (inList) cur = last; break;
+      case 'pageup': if (inList) cur = Math.max(0, cur - page); break;
+      case 'pagedown': if (inList) cur = Math.min(last, cur + page); break;
+      case 'enter': if (inList && items.length) return pick('continue'); break;
+      case 'ctrl-enter': if (inList && items.length) return pick('new'); break;
+      case 'escape': if (query) { query = ''; refilter(); } break;
+      case 'ctrl-s': return { kind: 'settings' };
+      case 'ctrl-n': wantNew = true; break;
+      case 'backspace':
+        if (inList) focus = 'search';                       // back to the search field
+        else if (query) { query = query.slice(0, -1); refilter(); }
+        break;
       case 'left': case 'right': {
         tab = (tab + (k.name === 'right' ? 1 : tabs.length - 1)) % tabs.length;
         load();
         saveConfig({ ...getConfig(), view: ws() ? ws().path : ELSE });               // remember the last used view
         break;
       }
-      default:
-        if (c === 'q') return null;
+      case 'char': case 'space':
+        if (!inList) { query += k.ch; refilter(); }
         else if (c === 'd') wantDelete = true;
-        else if (/^\d$/.test(c)) {
-          const tryN = Number(buf + c);
-          if (tryN >= 1 && tryN <= items.length) { buf += c; cur = tryN - 1; }
-          else if (Number(c) >= 1 && Number(c) <= items.length) { buf = c; cur = Number(c) - 1; }
-        }
-        else if (c === 'n') wantNew = true;
-        else if (c === 'o') { if (items.length || ws()) openFolder(items.length ? items[cur].path : ws().path); }   // nothing listed: workspace
+        else if (c === 'n') { if (items.length) return pick('new'); }
+        else if (c === 'p') wantNew = true;
+        else if (c === 'e') { if (items.length || ws()) openFolder(items.length ? items[cur].path : ws().path); }   // nothing listed: workspace
         else if (c === 's') return { kind: 'settings' };
+        break;
+      default:
     }
     if (wantNew && !ws()) status = workspaces.length ? 'Switch to a workspace tab to start a project' : 'Add a workspace in Settings first';
     else if (wantNew) {

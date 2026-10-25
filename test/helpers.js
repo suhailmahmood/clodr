@@ -12,7 +12,6 @@ export function sandbox() {
   for (const d of [claude, home, root, path.join(claude, 'projects')]) fs.mkdirSync(d, { recursive: true });
   process.env.CLAUDE_CONFIG_DIR = claude;
   process.env.CLODR_HOME = home;
-  delete process.env.CLODR_CWDFILE;
   return { base, claude, home, root, cleanup: () => fs.rmSync(base, { recursive: true, force: true }) };
 }
 
