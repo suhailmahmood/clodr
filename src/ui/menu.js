@@ -8,6 +8,9 @@ import { T, RESET, header, hintLine, fit, step, paint, confirm, readLine } from 
 import { renderTabs } from './tabs.js';
 import { LIVE } from './term.js';
 
+const BLINK_MS = 530;
+const PLACEHOLDER = 'type to search...';
+
 // Two hint lines. Row 1 = what acts on a project; row 2 = navigation and global. Search focus types; list focus runs one-key actions.
 const HINT_SEARCH = ['Type to search | Esc clear | ↓ choose a project', '←/→ tab | ↑/↓ move | ^N new project | ^S settings | ^C quit | ● = has session(s)'];
 const HINT_LIST = ['Enter continue | n new session | e explore | d delete', '←/→ tab | ↑/↓ move | ^N new project | ^S settings | ^C quit | ● = has session(s)'];
@@ -16,9 +19,10 @@ const HINT_LIST = ['Enter continue | n new session | e explore | d delete', '←
  * Main menu: one tab per workspace, then "Everything else".
  * Resolves to {kind:'folder',path,mode:'continue'|'new'} | {kind:'new',name,root} | {kind:'settings'} | null (quit).
  * @param {object} term
- * @param {{workspaces:{path:string,name?:string}[], view?:string, status?:string, openFolder?:(p:string)=>void}} opts
+ * `memo` carries the selected project and search text between calls: written when the menu is left, read to come back to the same row.
+ * @param {{workspaces:{path:string,name?:string}[], view?:string, status?:string, memo?:{path?:string,query?:string}, openFolder?:(p:string)=>void}} opts
  */
-export async function selectEntry(term, { workspaces, view = '', status: initialStatus = '', openFolder = defaultOpen }) {
+export async function selectEntry(term, { workspaces, view = '', status: initialStatus = '', memo = {}, openFolder = defaultOpen }) {
   const tabs = [...workspaces.map((w, i) => ({ id: `w${i}`, ws: w, label: wsName(w) })), { id: ELSE, ws: null, label: 'Everything else' }];
   let tab = Math.max(0, tabs.findIndex((t) => (t.ws ? pathKey(t.ws.path) === pathKey(view) : view === ELSE)));   // unknown view: first tab
   const cache = {};                       // tab id -> folder list, loaded on first visit
@@ -27,6 +31,7 @@ export async function selectEntry(term, { workspaces, view = '', status: initial
   let items = [];                         // base filtered by the search text
   let query = '';
   let focus = 'search';                   // 'search' | 'list'
+  let caretOn = true;                     // blink phase of the search caret
   let leafLen = 0;
   let cur = 0;
   let off = 0;
@@ -63,6 +68,12 @@ export async function selectEntry(term, { workspaces, view = '', status: initial
     cur = 0; off = 0;
   }
   load();
+  if (memo.path) {                        // back from a project: same search, same row (found by path: the list is re-sorted by recency)
+    query = memo.query || '';
+    refilter();
+    const at = items.findIndex((i) => pathKey(i.path) === pathKey(memo.path));
+    if (at >= 0) { focus = 'list'; cur = at; }
+  }
 
   // One frame. Layout-dependent values (page size, footer row) are derived here from what is drawn.
   const draw = () => {
@@ -72,9 +83,13 @@ export async function selectEntry(term, { workspaces, view = '', status: initial
     const tag = ws() ? ws().path : 'All Claude Code sessions outside your workspaces';
     const empty = items.length ? ''
       : query ? 'No match.'
-      : ws() ? 'No projects yet. Press p to start one.'
+      : ws() ? 'No projects yet. Press ^N to start one.'
       : 'Nothing here yet. Run claude in any folder and it shows up here.';
-    const box = focus === 'search' ? `${query}${T.clay}█${RESET}` : query || `${T.dim}type to search${RESET}`;
+    const searching = focus === 'search';
+    const caret = searching ? (caretOn ? `${T.clay}█${RESET}${T.gray}` : ' ') : '';
+    const box = query ? `${query}${caret}`
+      : searching && caretOn ? `${T.clay}\x1b[7m${PLACEHOLDER[0]}${RESET}${T.faint}${PLACEHOLDER.slice(1)}${RESET}`   // block caret (inverse) over the first letter
+      : `${T.faint}${PLACEHOLDER}${RESET}`;
     lines.push(`${T.dim} ${tag}${RESET}`, `${T.gray} Search: ${box}${RESET}`, `${T.dim} ${empty}${RESET}`);
 
     page = Math.max(3, Math.min(items.length, term.height - lines.length - 4));   // rows: list + blank + 2 hint lines
@@ -132,14 +147,18 @@ export async function selectEntry(term, { workspaces, view = '', status: initial
 
   draw();
   for (;;) {
-    const k = await term.readKey(LIVE);
+    const k = await term.readKey(focus === 'search' ? { ...LIVE, timeout: BLINK_MS } : LIVE);
+    if (k.name === 'tick') { caretOn = !caretOn; draw(); continue; }
+    caretOn = true;                                        // a key press shows the caret solid
     status = '';
     const last = Math.max(0, items.length - 1);
     let wantDelete = false;
     let wantNew = false;
     const inList = focus === 'list';
     const c = k.name === 'char' && inList ? k.ch.toLowerCase() : '';
-    const pick = (mode) => ({ kind: 'folder', path: items[cur].path, mode });
+    const remember = () => { memo.path = inList ? items[cur]?.path : null; memo.query = query; };
+    const pick = (mode) => { remember(); return { kind: 'folder', path: items[cur].path, mode }; };
+    const settings = () => { remember(); return { kind: 'settings' }; };
     switch (k.name) {
       case 'down':
         if (!inList) { if (items.length) { focus = 'list'; cur = 0; } } else cur = step(cur, items.length, 'down');
@@ -155,7 +174,7 @@ export async function selectEntry(term, { workspaces, view = '', status: initial
       case 'enter': if (inList && items.length) return pick('continue'); break;
       case 'ctrl-enter': if (inList && items.length) return pick('new'); break;
       case 'escape': if (query) { query = ''; refilter(); } break;
-      case 'ctrl-s': return { kind: 'settings' };
+      case 'ctrl-s': return settings();
       case 'ctrl-n': wantNew = true; break;
       case 'backspace':
         if (inList) focus = 'search';                       // back to the search field
@@ -171,9 +190,8 @@ export async function selectEntry(term, { workspaces, view = '', status: initial
         if (!inList) { query += k.ch; refilter(); }
         else if (c === 'd') wantDelete = true;
         else if (c === 'n') { if (items.length) return pick('new'); }
-        else if (c === 'p') wantNew = true;
         else if (c === 'e') { if (items.length || ws()) openFolder(items.length ? items[cur].path : ws().path); }   // nothing listed: workspace
-        else if (c === 's') return { kind: 'settings' };
+        else if (c === 's') return settings();
         break;
       default:
     }

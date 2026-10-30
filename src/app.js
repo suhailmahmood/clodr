@@ -3,18 +3,19 @@ import path from 'node:path';
 import { getConfig } from './config.js';
 import { kebabName } from './text.js';
 import { isDir } from './paths.js';
-import { hasSession } from './sessions.js';
+import { listSessions } from './sessions.js';
 import { launchClaude } from './claude.js';
 import { initGit } from './git.js';
 import { selectEntry } from './ui/menu.js';
 import { showSettings } from './ui/settings.js';
+import { showResume } from './ui/resume.js';
 import { createTerm } from './ui/term.js';
 import { T, RESET } from './ui/common.js';
 
 
 const runIn = (dir, args) => launchClaude(dir, args);
 
-export const resumeIn = (dir) => runIn(dir, hasSession(dir) ? ['-r'] : []);   // no session: start a new one
+export const resumeIn = (dir, id) => runIn(dir, ['--resume', id]);
 
 export const newSessionIn = (dir) => runIn(dir, []);
 
@@ -60,6 +61,7 @@ export async function runMenu(term = createTerm()) {
   term.start();
   term.enterScreen();                          // one alt screen for every page
   let status = '';
+  const memo = {};                             // menu row to come back to
   try {
     for (;;) {
       const cfg = getConfig();                 // re-read each pass: Settings may have changed it
@@ -67,15 +69,25 @@ export async function runMenu(term = createTerm()) {
         if (!isDir(path.dirname(w.path))) continue;     // parent missing (unplugged drive): do not build the tree
         try { fs.mkdirSync(w.path, { recursive: true }); } catch { /* not writable */ }
       }
-      const sel = await selectEntry(term, { workspaces: cfg.workspaces, view: cfg.view, status });
+      const sel = await selectEntry(term, { workspaces: cfg.workspaces, view: cfg.view, status, memo });
       status = '';
       if (!sel) return 0;
       if (sel.kind === 'settings') { await showSettings(term); continue; }
       if (sel.kind === 'new') {
+        memo.path = null;                      // a new project has no row to return to yet
         const dir = await prepareProject(sel, term);
         if (dir) status = await runOutside(term, () => runIn(dir, []));
       } else {
-        status = await runOutside(term, () => (sel.mode === 'new' ? newSessionIn(sel.path) : resumeIn(sel.path)));
+        let id = null;                         // null = new session
+        if (sel.mode === 'continue') {
+          const sessions = listSessions(sel.path);
+          if (sessions.length) {
+            const pick = await showResume(term, { dir: sel.path, sessions });
+            if (!pick) continue;               // back to the menu
+            id = pick.id;
+          }
+        }
+        status = await runOutside(term, () => (id ? resumeIn(sel.path, id) : newSessionIn(sel.path)));
       }
     }
   } finally { term.exitScreen(); term.stop(); }

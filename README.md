@@ -7,9 +7,9 @@
 
 ![Clodr menu](https://raw.githubusercontent.com/suhailmahmood/clodr/master/screenshots/screenshot.svg)
 
-Clodr - manage all your Claude Code sessions from a single menu.
+Clodr - manage all your Claude Code sessions from a single menu. No more cd-ing into your project folders just to start Claude Code from there. Just launch your terminal and then run `clodr` and all your Claude Sessions are at your fingertips! Creating throwaway sessions is now a breeze with Clodr! Clodrs also lets you clean up leftovers.
 
-Starts or resumes Claude Code sessions in per-project folders under a workspace folder, lists your sessions in every other project, and cleans up leftovers. Cross-platform (Windows, macOS, Linux), Node ≥ 18, zero dependencies.
+Cross-platform (Windows, macOS, Linux), Node ≥ 18, zero dependencies.
 
 ## Install
 
@@ -23,12 +23,7 @@ Or straight from GitHub: `npm install -g github:suhailmahmood/clodr`.
 
 From a clone: `npm install -g .` (or `npm link` while developing).
 
-Update: rerun the install command. Uninstall: `npm uninstall -g clodr-cli`.
-
-Workspaces are managed inside Clodr (Settings › Manage workspaces); until a config file exists it uses `~/Workspace`. Clodr stays running while Claude does and returns to the menu when Claude exits, so your terminal stays in the folder you started from.
-
-Config lives in `%APPDATA%\clodr\config.json` (Windows) or `~/.config/clodr/config.json` (`CLODR_HOME` overrides): `workspaces` (`[{path, name?}]`, in order), `view` (a workspace path or `else`).
-
+Update: rerun the install command. Uninstall: `npm uninstall -g clodr-cli`.  
 Requirements: `claude` on `PATH`. Cleanup of orphaned projects needs Claude Code v2.1.288+ (`claude purge`).
 
 ## Usage
@@ -39,16 +34,28 @@ The menu opens on a **Search** field under the workspace path. Type to filter (c
 
 | Key | Where | Action |
 |---|---|---|
-| `Enter` | list | Continue the last session (`claude -r`). With no session, starts a new one. |
+| `Enter` | list | Opens the session list of the project: newest first, with name, age, size and id. `↑`/`↓` move, `Enter` resumes, `n` starts a new session, `e` explores the folder, `Esc` or `Backspace` goes back. With no session, starts a new one. |
 | `Ctrl+Enter` or `n` | list | Start a new session (`claude`). `Ctrl+Enter` needs a terminal that tells it from `Enter`; `n` always works. |
 | `e` | list | Explore: open the folder in the file manager (nothing listed: the workspace). |
 | `d` | list | Delete the folder and its Claude sessions after a red `[y/N]` (only `y` confirms). |
-| `Ctrl+N` or `p` | search / list | New project: asks for a name, creates that folder in the current workspace, offers `git init`, then starts Claude. `Esc` at the name prompt goes back. |
+| `Ctrl+N` | search / list | New project: asks for a name, creates that folder in the current workspace, offers `git init`, then starts Claude. `Esc` at the name prompt goes back. |
 | `Ctrl+S` or `s` | search / list | Settings. |
 | `↑` `↓` `Home` `End` `PgUp` `PgDn` | list | Move. |
+| Mouse wheel | list | Move. Clodr has no mouse handling of its own: many terminals (e.g. Windows Terminal) send the wheel as `↑`/`↓` while a full-screen app is showing, others don't, so it may do nothing in yours. |
 | `←` `→` | both | Switch tab. |
 
 Letter shortcuts only act while the list has focus (in search, letters are typed); the Ctrl chords work from both. If Claude cannot start (not on `PATH`, folder gone), the reason shows in the menu status row. On every other page `Esc` or `Backspace` goes back.
+
+### Workspace
+At the heart of Clodr is the concept called *Workspace*, which is just a folder containing your projects. Add as many workspace as you need. Your Claude Code sessions that do not belong to any of your defined Workspaces show up under *Everything else*.
+
+Workspaces are managed inside Clodr (Settings › Manage workspaces). Until a config file exists it uses `~/Workspace`.
+
+Config lives in `%APPDATA%\clodr\config.json` (Windows) or `~/.config/clodr/config.json` (`CLODR_HOME` overrides): `workspaces` (`[{path, name?}]`, in order), `view` (a workspace path or `else`).
+
+### Session list
+
+`Enter` on a project that has sessions opens its session list, newest first. `Enter` resumes the highlighted session (`claude --resume <id>`). You can also create a new session from this screen with `n` (simply runs `calude`).
 
 ### Tabs
 

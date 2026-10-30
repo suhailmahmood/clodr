@@ -7,7 +7,7 @@ import { kebabName, formatSize, TAGLINE } from '../src/text.js';
 import { relPath, pathKey, encodeDir, expandPath } from '../src/paths.js';
 import { parseKeys } from '../src/ui/term.js';
 import { getConfig, saveConfig, nestedIn } from '../src/config.js';
-import { globalFolders, workspaceFolders, outsideFolders, STATE, removeFolder, removeSessions, hasSession, sessionCount } from '../src/sessions.js';
+import { globalFolders, workspaceFolders, outsideFolders, STATE, removeFolder, removeSessions, sessionCount } from '../src/sessions.js';
 import { derivePath, parsePurgeOutput } from '../src/cleanup.js';
 
 let sb;
@@ -99,9 +99,8 @@ test('nested workspace: its sessions leave the parent and stay out of everything
 
 test('session counting', () => {
   const a = path.join(sb.root, 'Alpha');
-  assert.equal(hasSession(a), true);
   assert.equal(sessionCount(a), 1);
-  assert.equal(hasSession(path.join(sb.root, 'Nope')), false);
+  assert.equal(sessionCount(path.join(sb.root, 'Nope')), 0);
 });
 
 test('removeFolder refuses outside root, deletes folder + sessions', () => {

@@ -21,8 +21,57 @@ function transcripts(projDir) {
 
 export const sessionCount = (dir) => transcripts(projectDir(dir)).length;
 
-export function hasSession(dir) {
-  try { return fs.readdirSync(projectDir(dir)).some((n) => n.endsWith('.jsonl')); } catch { return false; }
+const HEAD = 64 * 1024;
+const TAIL = 256 * 1024;
+
+// Both ends of a file as text. Titles are appended late and re-appended, the first prompt is near the start.
+function readEnds(file, size) {
+  const fd = fs.openSync(file, 'r');
+  try {
+    const part = (pos, len) => {
+      const buf = Buffer.alloc(len);
+      return buf.subarray(0, fs.readSync(fd, buf, 0, len, pos)).toString('utf8');
+    };
+    if (size <= HEAD + TAIL) return { head: part(0, size), tail: '' };
+    return { head: part(0, HEAD), tail: part(size - TAIL, TAIL) };
+  } finally { fs.closeSync(fd); }
+}
+
+const jsonLines = (text) => text.split('\n').flatMap((l) => { try { return [JSON.parse(l)]; } catch { return []; } });   // cut-off edge lines drop out
+
+function firstPrompt(entries) {
+  for (const e of entries) {
+    if (e.type !== 'user' || e.isMeta) continue;
+    const c = e.message?.content;
+    const text = typeof c === 'string' ? c : Array.isArray(c) ? c.find((p) => p.type === 'text')?.text : '';
+    if (text && !text.trimStart().startsWith('<')) return text;     // "<command-name>", "<system-reminder>": not typed by the user
+  }
+  return '';
+}
+
+// Name of a session like claude -r shows it: /rename title, else the generated title, else the last / first prompt.
+function sessionTitle(file, size) {
+  let ends;
+  try { ends = readEnds(file, size); } catch { return ''; }
+  const head = jsonLines(ends.head);
+  const entries = [...head, ...jsonLines(ends.tail)];
+  const last = (type, key) => entries.findLast((e) => e.type === type && e[key])?.[key];
+  const title = last('custom-title', 'customTitle') || last('ai-title', 'aiTitle') || last('last-prompt', 'lastPrompt') || firstPrompt(head);
+  return title.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Sessions of a folder, newest first. title is '' when the transcript has nothing to name it by.
+ * @returns {{id:string,title:string,mtime:Date,size:number}[]}
+ */
+export function listSessions(dir) {
+  const out = [];
+  for (const { file, mtime } of transcripts(projectDir(dir))) {
+    let size;
+    try { size = fs.statSync(file).size; } catch { continue; }
+    out.push({ id: path.basename(file, '.jsonl'), title: sessionTitle(file, size), mtime, size });
+  }
+  return out;
 }
 
 // Newest session time (else the folder's own time) and session count of a folder, from one scan.

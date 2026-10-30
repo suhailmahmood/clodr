@@ -7,6 +7,8 @@ import { getConfig, saveConfig } from '../src/config.js';
 import { runMenu } from '../src/app.js';
 import { selectEntry } from '../src/ui/menu.js';
 import { showSettings } from '../src/ui/settings.js';
+import { showResume } from '../src/ui/resume.js';
+import { listSessions } from '../src/sessions.js';
 import { showWorkspaces } from '../src/ui/workspaces.js';
 import { scanCleanup, planOrphans, executeCleanup, runningSessions } from '../src/cleanup.js';
 import { purgeSupported, launchClaude } from '../src/claude.js';
@@ -40,11 +42,34 @@ test('menu: newest first, Enter continues, ctrl-enter / n start new', async () =
   assert.match(t.text, /2\.\s+Beta/);
 });
 
-test('menu: down wraps, q quits from the list', async () => {
+test('menu: down wraps; Ctrl+S opens settings from the list', async () => {
   const beta = { kind: 'folder', path: path.join(sb.root, 'Beta'), mode: 'continue' };
   assert.deepEqual(await menu(fakeTerm().press('down', 'down', 'enter')), beta);
   assert.deepEqual(await menu(fakeTerm().press('down', 'down', 'down', 'down', 'enter')), beta);
   assert.deepEqual(await menu(fakeTerm().press('down', 'ctrl-s')), { kind: 'settings' });
+});
+
+test('menu: search caret blinks; the placeholder shows until something is typed', async () => {
+  const t = fakeTerm().press('tick', 'a', 'ctrl-s');
+  await menu(t);
+  assert.match(t.text, /Search: type to search\.\.\.[\s\S]*Search: type to search\.\.\.[\s\S]*Search: a█/);   // placeholder starts at the caret column, blink or not; typed: caret solid
+  assert.doesNotMatch(t.text, /Search: a█type to search/);                                     // placeholder gone once typed
+});
+
+test('menu: memo brings back the same row and search text', async () => {
+  const memo = {};
+  const beta = { kind: 'folder', path: path.join(sb.root, 'Beta'), mode: 'continue' };
+  assert.deepEqual(await menu(fakeTerm().press('down', 'down', 'enter'), '', { memo }), beta);
+  assert.deepEqual(await menu(fakeTerm().press('enter'), '', { memo }), beta);           // lands on Beta, list focused
+  const found = {};
+  await menu(fakeTerm().type('bet').press('down', 'enter'), '', { memo: found });
+  assert.equal(found.query, 'bet');
+  const t = fakeTerm().press('enter');
+  assert.deepEqual(await menu(t, '', { memo: found }), beta);
+  assert.match(t.text, /Search: bet/);
+  const none = {};
+  await menu(fakeTerm().press('ctrl-s'), '', { memo: none });                           // search focus: nothing to remember
+  assert.equal(none.path, null);
 });
 
 test('menu: search field takes letters; starts-with before contains, case-insensitive', async () => {
@@ -69,9 +94,9 @@ test('menu: down with no match stays in search; Backspace in the list returns to
   assert.deepEqual(await menu(fakeTerm().press('down', 'backspace', 'e', 'ctrl-s')), { kind: 'settings' });   // 'e' typed into search, not explore
 });
 
-test('menu: p asks for a project name, s opens settings', async () => {
-  assert.deepEqual(await menu(fakeTerm().press('down', 'p').type('hi there').press('enter')), { kind: 'new', name: 'hi there', root: sb.root });
-  assert.deepEqual(await menu(fakeTerm().press('down', 'p', 'escape', 'ctrl-s')), { kind: 'settings' });
+test('menu: ^N asks for a project name, ^S opens settings', async () => {
+  assert.deepEqual(await menu(fakeTerm().press('down', 'ctrl-n').type('hi there').press('enter')), { kind: 'new', name: 'hi there', root: sb.root });
+  assert.deepEqual(await menu(fakeTerm().press('down', 'ctrl-n', 'escape', 'ctrl-s')), { kind: 'settings' });
   assert.deepEqual(await menu(fakeTerm().press('down', 's')), { kind: 'settings' });
   assert.deepEqual(await menu(fakeTerm().press('ctrl-s')), { kind: 'settings' });          // chords work from the search field too
   assert.deepEqual(await menu(fakeTerm().press('ctrl-n').type('y').press('enter')), { kind: 'new', name: 'y', root: sb.root });
@@ -173,11 +198,48 @@ test('settings: Manage workspaces opens the workspaces page', async () => {
 
 test('runMenu: git prompt stays on the menu screen; menu comes back after claude exits', async () => {
   const before = stub.log().length;
-  const t = fakeTerm().press('ctrl-n').type('Fresh Proj').press('enter', 'n').type('Alpha').press('down', 'enter');   // new project, no git; then find and continue Alpha
+  const t = fakeTerm().press('ctrl-n').type('Fresh Proj').press('enter', 'n').type('Alpha').press('down', 'enter', 'enter');   // new project, no git; then find Alpha and resume its session
   await assert.rejects(runMenu(t), /ran out of keys/);                     // back at the menu, waiting for a key
   assert.match(t.text, /Initialize git in Fresh-Proj\? \[Y\/n\]/);
   assert.equal(fs.existsSync(path.join(sb.root, 'Fresh-Proj', '.git')), false);
-  assert.ok(stub.log().slice(before).includes('-r'));
+  assert.ok(stub.log().slice(before).includes('--resume a1'));
+});
+
+test('resume screen: newest first, three rows each, Enter resumes, n starts new, Esc/Backspace go back', async () => {
+  const sessions = [
+    { id: 'id-new', title: 'x'.repeat(200), mtime: new Date(Date.now() - 5 * 60_000), size: 2048 },
+    { id: 'id-old', title: '', mtime: new Date(Date.now() - 3 * 86400_000), size: 3 * 1024 * 1024 },
+  ];
+  const opened = [];
+  const show = (t) => showResume(t, { dir: proj, sessions, openFolder: (p) => opened.push(p) });
+  const t = fakeTerm({ width: 100 }).press('down', 'enter');
+  assert.deepEqual(await show(t), { id: 'id-old' });
+  assert.match(t.text, /1\. x+\.\.\./);
+  assert.match(t.text, /5 minutes ago {1} · 2\.0 KB {3} · id-new/);        // columns padded so the separators align
+  assert.match(t.text, /2\. \(untitled\)/);
+  assert.match(t.text, /3 days ago {4} · 3\.0 MB {3} · id-old/);
+  assert.match(t.text, /↑\/↓ move \| Enter resume \| n new session \| e explore \| Esc\/Bksp back \| \^C quit/);
+  assert.equal(await show(fakeTerm().press('e', 'escape')), null);
+  assert.deepEqual(opened, [proj]);
+  assert.deepEqual(await show(fakeTerm().press('n')), { id: null });
+  assert.equal(await show(fakeTerm().press('escape')), null);
+  assert.equal(await show(fakeTerm().press('backspace')), null);
+});
+
+test('listSessions: title from /rename, else generated, else first prompt; newest first', () => {
+  const dir = mkdirs(path.join(sb.base, 'code', 'titles'))[0];
+  const pd = addSession(sb.claude, dir, { id: 'plain', ageH: 3 });
+  const write = (id, lines, ageH) => {
+    const f = path.join(pd, `${id}.jsonl`);
+    fs.writeFileSync(f, lines.map((l) => JSON.stringify(l)).join('\n'));
+    const t = new Date(Date.now() - ageH * 3600_000);
+    fs.utimesSync(f, t, t);
+  };
+  write('named', [{ type: 'user', message: { content: 'hello' } }, { type: 'ai-title', aiTitle: 'Generated' }, { type: 'custom-title', customTitle: 'Mine' }], 1);
+  write('gen', [{ type: 'ai-title', aiTitle: 'Generated' }], 2);
+  write('prompt', [{ type: 'user', message: { content: '<command-name>/x</command-name>' } }, { type: 'user', message: { content: [{ type: 'text', text: 'first\nprompt' }] } }], 0.5);
+  const list = listSessions(dir);
+  assert.deepEqual(list.map((s) => [s.id, s.title]), [['prompt', 'first prompt'], ['named', 'Mine'], ['gen', 'Generated'], ['plain', '']]);
 });
 
 test('launch failure comes back as an error and shows in the menu status row', async () => {
@@ -210,8 +272,8 @@ test('menu: two workspaces + nested exclusion', async () => {
   assert.doesNotMatch(t.text, /r1/);
   t = fakeTerm().press('right', 'down', 'enter');
   assert.deepEqual(await selectEntry(t, { workspaces, view: '' }), { kind: 'folder', path: repo, mode: 'continue' });
-  assert.deepEqual(await selectEntry(fakeTerm().press('down', 'p').type('x').press('enter'), { workspaces, view: clones }), { kind: 'new', name: 'x', root: clones });
-  assert.match((t = fakeTerm().press('left', 'down', 'p', 'ctrl-s'), await selectEntry(t, { workspaces, view: '' }), t.text), /Switch to a workspace tab/);
+  assert.deepEqual(await selectEntry(fakeTerm().press('down', 'ctrl-n').type('x').press('enter'), { workspaces, view: clones }), { kind: 'new', name: 'x', root: clones });
+  assert.match((t = fakeTerm().press('left', 'down', 'ctrl-n', 'ctrl-s'), await selectEntry(t, { workspaces, view: '' }), t.text), /Switch to a workspace tab/);
   reset();
 });
 

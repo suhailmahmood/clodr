@@ -7,6 +7,7 @@ export const EL = `${e}[K`;
 export const T = {
   gray: `${e}[38;2;190;190;190m`,   // light gray (truecolor; palette gray follows the terminal theme)
   dim: `${e}[38;2;120;120;120m`,
+  faint: `${e}[38;2;85;85;85m`,        // placeholders
   clay: `${e}[38;2;217;119;87m`,    // Claude orange #D97757
   cyan: `${e}[36m`,
   yellow: `${e}[33m`,

@@ -3,6 +3,7 @@
 const ESC = '\x1b';
 
 // readKey option for screens that redraw: also wakes on a terminal resize ({name:'resize'}).
+// Add `timeout` for a periodic {name:'tick'}.
 export const LIVE = { live: true };
 
 // Parses raw stdin chunks into {name, ch}. name: up down ctrl-up ctrl-down left right home end pageup pagedown delete enter ctrl-enter ctrl-<letter> escape backspace space ctrl-c char unknown
@@ -84,9 +85,15 @@ export function createTerm({ stdin = process.stdin, stdout = process.stdout } = 
       stdin.pause();
     },
     restore() { term.exitScreen(); if (stdin.isTTY) { try { stdin.setRawMode(false); } catch { /* closed */ } } },
-    readKey({ live = false } = {}) {
+    // timeout (ms): resolves {name:'tick'} if no key arrives in time. Implies live.
+    readKey({ live = false, timeout = 0 } = {}) {
       if (queue.length) return Promise.resolve(queue.shift());
-      return new Promise((resolve) => { waiter = { resolve, live }; });
+      return new Promise((resolve) => {
+        let timer;
+        const me = { live: live || timeout > 0, resolve: (k) => { clearTimeout(timer); resolve(k); } };
+        waiter = me;
+        if (timeout > 0) timer = setTimeout(() => { if (waiter === me) { waiter = null; resolve({ name: 'tick', ch: '' }); } }, timeout);
+      });
     },
     enterScreen() { stdout.write(`${ESC}[?1049h${ESC}[2J${ESC}[H${ESC}[?25l`); },
     exitScreen() { stdout.write(`${ESC}[?25h${ESC}[?1049l`); },
