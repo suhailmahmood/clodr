@@ -5,15 +5,57 @@ import { WIN } from './platform.js';
 import { formatSize } from './text.js';
 import { globalFolders, STATE } from './sessions.js';
 import { runClaude, runClaudeSync, purgeSupported } from './claude.js';
+import { runSync } from './proc.js';
 
 // ---- running claude detection ----
 
-// Claude writes ~/.claude/sessions/<pid>.json for every running session. EPERM = alive but not ours.
+// Image names of the given live pids, or null when they cannot be listed.
+function processNames(pids) {
+  const names = new Map();
+  if (WIN) {
+    const r = runSync('tasklist', ['/FO', 'CSV', '/NH']);
+    if (!r.ok) return null;
+    for (const line of r.out.split(/\r?\n/)) {
+      const m = /^"([^"]*)","(\d+)"/.exec(line);
+      if (m && pids.includes(Number(m[2]))) names.set(Number(m[2]), m[1]);
+    }
+  } else {
+    const r = runSync('ps', ['-p', pids.join(','), '-o', 'pid=,comm=']);
+    if (!r.ok && !r.out) return null;
+    for (const line of r.out.split('\n')) {
+      const m = /^\s*(\d+)\s+(.*)$/.exec(line);
+      if (m) names.set(Number(m[1]), path.basename(m[2].trim()));
+    }
+  }
+  return names;
+}
+
+// Creation time (FILETIME, as a string) of the given live pids on Windows, or null when it cannot be read.
+function processStartTimes(pids) {
+  const script = `Get-Process -Id ${pids.join(',')} -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Id) $($_.StartTime.ToFileTime())" }`;
+  const r = runSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', script]);
+  if (!r.ok && !r.out) return null;
+  const times = new Map();
+  for (const line of r.out.split(/\r?\n/)) {
+    const m = /^(\d+) (\d+)$/.exec(line.trim());
+    if (m) times.set(Number(m[1]), m[2]);
+  }
+  return times;
+}
+
+// Claude runs as its own binary, or under node when installed from npm.
+const CLAUDE_IMAGE = /claude|node/i;
+
+// Claude writes ~/.claude/sessions/<pid>.json for every running session, but leaves the file behind when it
+// does not exit cleanly, and the pid may since belong to another process. On Windows the file records the
+// process creation time (procStart): a pid is claude only if it was created at that exact moment, which a reused
+// pid never matches. Without that, a live pid counts only if its image looks like claude.
+// EPERM = alive but not ours to signal.
 export function runningSessions() {
   const dir = path.join(claudeDir(), 'sessions');
   let names;
   try { names = fs.readdirSync(dir); } catch { return []; }
-  const out = [];
+  const alive = [];
   for (const n of names) {
     if (!n.endsWith('.json')) continue;
     let j;
@@ -21,9 +63,16 @@ export function runningSessions() {
     const pid = Number(j.pid) || Number(path.basename(n, '.json'));
     if (!pid) continue;
     try { process.kill(pid, 0); } catch (e) { if (e.code !== 'EPERM') continue; }
-    out.push({ pid, cwd: j.cwd || '', sessionId: j.sessionId || '' });
+    alive.push({ pid, cwd: j.cwd || '', sessionId: j.sessionId || '', procStart: String(j.procStart || '') });
   }
-  return out;
+  if (!alive.length) return alive;
+  const starts = WIN && alive.some((s) => s.procStart) ? processStartTimes(alive.map((s) => s.pid)) : null;
+  const unverified = starts ? alive.filter((s) => !s.procStart) : alive;
+  const images = unverified.length ? processNames(unverified.map((s) => s.pid)) : new Map();
+  return alive.filter((s) => {
+    if (starts && s.procStart) return starts.get(s.pid) === s.procStart;
+    return !images || CLAUDE_IMAGE.test(images.get(s.pid) || '');
+  });
 }
 
 // ---- scanning ----
