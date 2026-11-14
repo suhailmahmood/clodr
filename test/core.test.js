@@ -9,6 +9,7 @@ import { parseKeys } from '../src/ui/term.js';
 import { getConfig, saveConfig, nestedIn } from '../src/config.js';
 import { globalFolders, workspaceFolders, outsideFolders, STATE, removeFolder, removeSessions, sessionCount } from '../src/sessions.js';
 import { derivePath, parsePurgeOutput } from '../src/cleanup.js';
+import { modelKey, messageCost, formatCost } from '../src/pricing.js';
 
 let sb;
 before(() => { sb = sandbox(); });
@@ -180,4 +181,27 @@ test('package.json and README carry the tagline', () => {
 test('formatSize', () => {
   assert.equal(formatSize(10), '10 B');
   assert.equal(formatSize(2048), '2.0 KB');
+});
+
+test('modelKey', () => {
+  assert.equal(modelKey('claude-opus-5-5'), 'opus-5-5');
+  assert.equal(modelKey('claude-opus-4-5-20251101'), 'opus-4-5');
+  assert.equal(modelKey('claude-sonnet-4-20250514'), 'sonnet-4');
+  assert.equal(modelKey('anthropic.claude-fable-5-2'), 'fable-5-2');
+  assert.equal(modelKey('<synthetic>'), null);
+});
+
+test('messageCost: cache tiers, long Haiku 5.5 prompts, fast mode, US-only inference, web search', () => {
+  const M = 1_000_000;
+  const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} != ${b}`);
+  near(messageCost('claude-opus-5-5', { input_tokens: M, output_tokens: M }), 4 + 20);
+  near(messageCost('claude-opus-5-5', { cache_read_input_tokens: M, cache_creation_input_tokens: 2 * M, cache_creation: { ephemeral_5m_input_tokens: M, ephemeral_1h_input_tokens: M } }), 0.2 + 5 + 8);
+  near(messageCost('claude-opus-5-5', { cache_creation_input_tokens: M }), 5);              // no split: 5-minute writes
+  near(messageCost('claude-haiku-5-5', { input_tokens: 100_000, output_tokens: M }), 0.01 + 0.5);
+  near(messageCost('claude-haiku-5-5', { input_tokens: 50_000, cache_read_input_tokens: 60_000, output_tokens: M }), 0.025 + 0.003 + 2.5);
+  near(messageCost('claude-opus-5-5', { output_tokens: M, speed: 'fast', inference_geo: 'us' }), 20 * 2 * 1.1);
+  near(messageCost('claude-opus-5-5', { server_tool_use: { web_search_requests: 3 } }), 0.03);
+  assert.equal(messageCost('claude-unknown-1', { output_tokens: M }), null);
+  assert.equal(formatCost(0), '$0.00');
+  assert.equal(formatCost(1234.567), '$1,234.57');
 });

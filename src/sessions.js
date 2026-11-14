@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { claudeDir, projectDir, pathKey, relPath, trimSep, isDir, driveAvailable } from './paths.js';
+import { configDir } from './config.js';
+import { messageCost } from './pricing.js';
 
 export const STATE = { OK: 'ok', GONE: 'gone', UNKNOWN: 'unknown', OFFLINE: 'offline' };
 
@@ -60,17 +62,77 @@ function sessionTitle(file, size) {
   return title.replace(/\s+/g, ' ').trim();
 }
 
+// Estimated USD cost of one transcript. Claude writes one line per content block of a response, each carrying
+// the same usage, so every response counts once (by message id, the last line wins as it is the most complete).
+function transcriptCost(file) {
+  let text;
+  try { text = fs.readFileSync(file, 'utf8'); } catch { return 0; }
+  const seen = new Map();
+  for (const line of text.split('\n')) {
+    if (!line.includes('"usage"')) continue;
+    let e;
+    try { e = JSON.parse(line); } catch { continue; }
+    const m = e.message;
+    if (m?.usage) seen.set(m.id || e.uuid, m);
+  }
+  let usd = 0;
+  for (const m of seen.values()) usd += messageCost(m.model, m.usage) || 0;
+  return usd;
+}
+
+// Costs are kept in the config dir per transcript file, recomputed only when its size or time changes.
+const costCacheFile = () => path.join(configDir(), 'costs.json');
+let costCache = null;
+
+function cachedCost(file) {
+  let st;
+  try { st = fs.statSync(file); } catch { return 0; }
+  const hit = costCache.files[file];
+  if (hit && hit.size === st.size && hit.mtimeMs === st.mtimeMs) return hit.usd;
+  const usd = transcriptCost(file);
+  costCache.files[file] = { size: st.size, mtimeMs: st.mtimeMs, usd };
+  costCache.dirty = true;
+  return usd;
+}
+
+// A session's transcript plus its subagents' transcripts.
+function sessionCost(projDir, id) {
+  const sub = path.join(projDir, id, 'subagents');
+  let names = [];
+  try { names = fs.readdirSync(sub).filter((n) => n.endsWith('.jsonl')); } catch { /* none */ }
+  return [path.join(projDir, `${id}.jsonl`), ...names.map((n) => path.join(sub, n))].reduce((sum, f) => sum + cachedCost(f), 0);
+}
+
+function loadCostCache() {
+  try { costCache = { files: JSON.parse(fs.readFileSync(costCacheFile(), 'utf8')).files || {} }; } catch { costCache = { files: {} }; }
+}
+
+function saveCostCache() {
+  if (!costCache.dirty) return;
+  for (const f of Object.keys(costCache.files)) if (!fs.existsSync(f)) delete costCache.files[f];
+  try {
+    fs.mkdirSync(configDir(), { recursive: true });
+    fs.writeFileSync(costCacheFile(), JSON.stringify({ files: costCache.files }));
+    costCache.dirty = false;
+  } catch { /* cache only: recomputed next time */ }
+}
+
 /**
  * Sessions of a folder, newest first. title is '' when the transcript has nothing to name it by.
- * @returns {{id:string,title:string,mtime:Date,size:number}[]}
+ * cost is the estimated USD cost at API prices, subagents included.
+ * @returns {{id:string,title:string,mtime:Date,size:number,cost:number}[]}
  */
 export function listSessions(dir) {
+  const pd = projectDir(dir);
+  if (!costCache) loadCostCache();
   const out = [];
-  for (const { file, mtime } of transcripts(projectDir(dir))) {
+  for (const { file, mtime } of transcripts(pd)) {
     let size;
     try { size = fs.statSync(file).size; } catch { continue; }
-    out.push({ id: path.basename(file, '.jsonl'), title: sessionTitle(file, size), mtime, size });
+    const id = path.basename(file, '.jsonl');
+    out.push({ id, title: sessionTitle(file, size), mtime, size, cost: sessionCost(pd, id) });
   }
+  saveCostCache();
   return out;
 }
 

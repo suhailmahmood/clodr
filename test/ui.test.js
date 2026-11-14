@@ -207,17 +207,19 @@ test('runMenu: git prompt stays on the menu screen; menu comes back after claude
 
 test('resume screen: newest first, three rows each, Enter resumes, n starts new, Esc/Backspace go back', async () => {
   const sessions = [
-    { id: 'id-new', title: 'x'.repeat(200), mtime: new Date(Date.now() - 5 * 60_000), size: 2048 },
-    { id: 'id-old', title: '', mtime: new Date(Date.now() - 3 * 86400_000), size: 3 * 1024 * 1024 },
+    { id: 'id-new', title: 'x'.repeat(200), mtime: new Date(Date.now() - 5 * 60_000), size: 2048, cost: 0.4 },
+    { id: 'id-old', title: '', mtime: new Date(Date.now() - 3 * 86400_000), size: 3 * 1024 * 1024, cost: 1234.567 },
   ];
   const opened = [];
   const show = (t) => showResume(t, { dir: proj, sessions, openFolder: (p) => opened.push(p) });
   const t = fakeTerm({ width: 100 }).press('down', 'enter');
   assert.deepEqual(await show(t), { id: 'id-old' });
   assert.match(t.text, /1\. x+\.\.\./);
-  assert.match(t.text, /5 minutes ago {1} · 2\.0 KB {3} · id-new/);        // columns padded so the separators align
+  assert.match(t.text, /5 minutes ago {1} · 2\.0 KB {3} · \$0\.40 {4} · id-new/);   // columns padded so the separators align
   assert.match(t.text, /2\. \(untitled\)/);
-  assert.match(t.text, /3 days ago {4} · 3\.0 MB {3} · id-old/);
+  assert.match(t.text, /3 days ago {4} · 3\.0 MB {3} · \$1,234\.57 · id-old/);
+  assert.match(t.text, /Sessions in .*proj · \$1,234\.97 total/);
+  assert.match(t.text, /\^C quit[^\n]*\n[^\n]*Costs estimated using Claude API pricing from Nov 9, 2026/);   // note right under the hints
   assert.match(t.text, /↑\/↓ move \| Enter resume \| n new session \| e explore \| d delete \| Esc\/Bksp back \| \^C quit/);
   assert.equal(await show(fakeTerm().press('e', 'escape')), null);
   assert.deepEqual(opened, [proj]);
@@ -228,8 +230,8 @@ test('resume screen: newest first, three rows each, Enter resumes, n starts new,
 
 test('resume screen: d deletes the highlighted session after y; n/Esc keep it; running one is refused', async () => {
   const mk = () => [
-    { id: 's1', title: 'one', mtime: new Date(), size: 1 },
-    { id: 's2', title: 'two', mtime: new Date(), size: 1 },
+    { id: 's1', title: 'one', mtime: new Date(), size: 1, cost: 2 },
+    { id: 's2', title: 'two', mtime: new Date(), size: 1, cost: 0.5 },
   ];
   const removed = [];
   const show = (t, running = []) => showResume(t, { dir: proj, sessions: mk(), running: () => running, remove: (id) => { removed.push(id); return null; } });
@@ -240,6 +242,8 @@ test('resume screen: d deletes the highlighted session after y; n/Esc keep it; r
   assert.deepEqual(await show(t), { id: 's2' });
   assert.deepEqual(removed, ['s1']);
   assert.match(t.text, /Session deleted/);
+  assert.match(t.frames[0], /proj · \$2\.50 total/);
+  assert.match(t.frames.at(-1), /proj · \$0\.50 total/);                 // total drops with the deleted session
   assert.match(t.text, /Delete session s1\? This cannot be undone\. \[y\/N\]/);
   removed.length = 0;
   const busy = fakeTerm().press('d', 'escape');
@@ -282,6 +286,22 @@ test('listSessions: title from /rename, else generated, else first prompt; newes
   write('prompt', [{ type: 'user', message: { content: '<command-name>/x</command-name>' } }, { type: 'user', message: { content: [{ type: 'text', text: 'first\nprompt' }] } }], 0.5);
   const list = listSessions(dir);
   assert.deepEqual(list.map((s) => [s.id, s.title]), [['prompt', 'first prompt'], ['named', 'Mine'], ['gen', 'Generated'], ['plain', '']]);
+});
+
+test('listSessions: cost counts each response once, adds subagents, and is cached until the file changes', () => {
+  const dir = mkdirs(path.join(sb.base, 'code', 'costs'))[0];
+  const pd = addSession(sb.claude, dir, { id: 'c1' });
+  const usage = { input_tokens: 1_000_000, output_tokens: 1_000_000, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
+  const reply = (id, model = 'claude-sonnet-4-5-20250929') => JSON.stringify({ type: 'assistant', message: { id, model, usage } });
+  const main = path.join(pd, 'c1.jsonl');
+  fs.appendFileSync(main, [reply('m1'), reply('m1'), reply('m2', 'claude-unknown-1')].join('\n'));   // m1 split over two lines; unknown model costs nothing
+  const sub = mkdirs(path.join(pd, 'c1', 'subagents'))[0];
+  fs.writeFileSync(path.join(sub, 'agent-x.jsonl'), reply('s1', 'claude-haiku-4-5-20251001'));
+  const cost = () => listSessions(dir).find((s) => s.id === 'c1').cost;
+  assert.equal(cost(), 18 + 6);                                             // sonnet 4.5: $3 + $15; haiku 4.5: $1 + $5
+  assert.ok(fs.existsSync(path.join(process.env.CLODR_HOME, 'costs.json')));
+  fs.appendFileSync(main, `\n${reply('m3')}`);
+  assert.equal(cost(), 18 * 2 + 6);
 });
 
 test('launch failure comes back as an error and shows in the menu status row', async () => {
