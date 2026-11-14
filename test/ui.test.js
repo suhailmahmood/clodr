@@ -8,7 +8,7 @@ import { runMenu } from '../src/app.js';
 import { selectEntry } from '../src/ui/menu.js';
 import { showSettings } from '../src/ui/settings.js';
 import { showResume } from '../src/ui/resume.js';
-import { listSessions } from '../src/sessions.js';
+import { listSessions, removeSession } from '../src/sessions.js';
 import { showWorkspaces } from '../src/ui/workspaces.js';
 import { scanCleanup, planOrphans, executeCleanup, runningSessions } from '../src/cleanup.js';
 import { purgeSupported, launchClaude } from '../src/claude.js';
@@ -218,12 +218,54 @@ test('resume screen: newest first, three rows each, Enter resumes, n starts new,
   assert.match(t.text, /5 minutes ago {1} · 2\.0 KB {3} · id-new/);        // columns padded so the separators align
   assert.match(t.text, /2\. \(untitled\)/);
   assert.match(t.text, /3 days ago {4} · 3\.0 MB {3} · id-old/);
-  assert.match(t.text, /↑\/↓ move \| Enter resume \| n new session \| e explore \| Esc\/Bksp back \| \^C quit/);
+  assert.match(t.text, /↑\/↓ move \| Enter resume \| n new session \| e explore \| d delete \| Esc\/Bksp back \| \^C quit/);
   assert.equal(await show(fakeTerm().press('e', 'escape')), null);
   assert.deepEqual(opened, [proj]);
   assert.deepEqual(await show(fakeTerm().press('n')), { id: null });
   assert.equal(await show(fakeTerm().press('escape')), null);
   assert.equal(await show(fakeTerm().press('backspace')), null);
+});
+
+test('resume screen: d deletes the highlighted session after y; n/Esc keep it; running one is refused', async () => {
+  const mk = () => [
+    { id: 's1', title: 'one', mtime: new Date(), size: 1 },
+    { id: 's2', title: 'two', mtime: new Date(), size: 1 },
+  ];
+  const removed = [];
+  const show = (t, running = []) => showResume(t, { dir: proj, sessions: mk(), running: () => running, remove: (id) => { removed.push(id); return null; } });
+  await show(fakeTerm().press('d', 'n', 'escape'));                        // declined
+  await show(fakeTerm().press('d', 'escape', 'escape'));                   // Esc declines too
+  assert.deepEqual(removed, []);
+  const t = fakeTerm().press('d', 'y', 'enter');                           // list shrinks: Enter now picks the remaining one
+  assert.deepEqual(await show(t), { id: 's2' });
+  assert.deepEqual(removed, ['s1']);
+  assert.match(t.text, /Session deleted/);
+  assert.match(t.text, /Delete session s1\? This cannot be undone\. \[y\/N\]/);
+  removed.length = 0;
+  const busy = fakeTerm().press('d', 'escape');
+  await show(busy, [{ sessionId: 's1' }]);
+  assert.deepEqual(removed, []);
+  assert.match(busy.text, /Session is running\. Close it first\./);
+  assert.equal(await show(fakeTerm().press('d', 'y', 'd', 'y')), null);    // last session deleted: back to the menu
+  assert.deepEqual(removed, ['s1', 's2']);
+  const failing = fakeTerm().press('d', 'y', 'escape');
+  await showResume(failing, { dir: proj, sessions: mk(), running: () => [], remove: () => 'Delete failed: busy' });
+  assert.match(failing.text, /Delete failed: busy/);
+});
+
+test('removeSession: removes transcript, subagent dir, file history and env by file name; leaves others', () => {
+  const dir = mkdirs(path.join(sb.base, 'code', 'rm'))[0];
+  const pd = addSession(sb.claude, dir, { id: 'gone' });
+  addSession(sb.claude, dir, { id: 'kept' });
+  const extra = [path.join(pd, 'gone', 'subagents'), path.join(sb.claude, 'file-history', 'gone'), path.join(sb.claude, 'file-history', 'kept')];
+  for (const d of extra) { fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, 'f'), 'x'); }
+  assert.equal(removeSession(dir, 'gone'), null);
+  assert.deepEqual(fs.readdirSync(pd).sort(), ['kept.jsonl']);
+  assert.equal(fs.existsSync(path.join(sb.claude, 'file-history', 'gone')), false);   // session-env was never there: no error
+  assert.equal(fs.existsSync(path.join(sb.claude, 'file-history', 'kept')), true);
+  assert.match(removeSession(dir, '../kept'), /Refusing/);
+  assert.match(removeSession(dir, ''), /Refusing/);
+  assert.equal(fs.existsSync(path.join(pd, 'kept.jsonl')), true);
 });
 
 test('listSessions: title from /rename, else generated, else first prompt; newest first', () => {

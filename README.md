@@ -34,7 +34,7 @@ The menu opens on a **Search** field under the workspace path. Type to filter (c
 
 | Key | Where | Action |
 |---|---|---|
-| `Enter` | list | Opens the session list of the project: newest first, with name, age, size and id. `↑`/`↓` move, `Enter` resumes, `n` starts a new session, `e` explores the folder, `Esc` or `Backspace` goes back. With no session, starts a new one. |
+| `Enter` | list | Opens the session list of the project: newest first, with name, age, size and id. `↑`/`↓` move, `Enter` resumes, `n` starts a new session, `e` explores the folder, `d` deletes the highlighted session after a `y/N` (its subagent transcripts and file edit history go with it; a running session is refused), `Esc` or `Backspace` goes back. With no session, starts a new one. |
 | `Ctrl+Enter` or `n` | list | Start a new session (`claude`). `Ctrl+Enter` needs a terminal that tells it from `Enter`; `n` always works. |
 | `e` | list | Explore: open the folder in the file manager (nothing listed: the workspace). |
 | `d` | list | Delete the folder and its Claude sessions after a red `[y/N]` (only `y` confirms). |

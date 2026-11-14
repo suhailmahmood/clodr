@@ -157,6 +157,19 @@ export function outsideFolders(roots, all = globalFolders()) {
   return all.filter((f) => f.state === STATE.OK && roots.every((r) => relPath(f.path, r) === null));
 }
 
+// Deletes one session of a folder: its subagent folder, file edit history and env dir, then the transcript last
+// so a failed delete leaves the session listed and retryable. Everything is keyed by the transcript's file name,
+// never by the ids inside it (a fork's transcript starts with its parent's history). Returns null on success, else a message.
+export function removeSession(dir, id, projDir) {
+  if (!id || id !== path.basename(id) || id === '.' || id === '..') return `Refusing: bad session id ${id}`;
+  const pd = projDir || projectDir(dir);
+  const targets = [path.join(pd, id), path.join(claudeDir(), 'file-history', id), path.join(claudeDir(), 'session-env', id), path.join(pd, `${id}.jsonl`)];
+  for (const t of targets) {
+    try { fs.rmSync(t, { recursive: true, force: true }); } catch (e) { return `Delete failed: ${e.message}`; }
+  }
+  return null;
+}
+
 // Deletes only the folder's Claude sessions. Returns null on success, else a message.
 export function removeSessions(dir, projDir) {
   const pd = projDir || projectDir(dir);
