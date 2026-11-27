@@ -18,12 +18,13 @@ const clip = (s, width) => (s.length > width ? `${s.slice(0, Math.max(0, width -
  * Session picker for one folder: newest first, three rows each.
  * Resolves to {id} (resume it) | {id:null} (new session) | null (back, or the last session was deleted).
  * `d` deletes the highlighted session after a y/N; a session that is running is refused.
+ * `status` is shown in the hint line until the first key.
  * @param {object} term
- * @param {{dir:string, sessions:{id:string,title:string,mtime:Date,size:number,cost:number}[]}} opts
+ * @param {{dir:string, sessions:{id:string,title:string,mtime:Date,size:number,cost:number}[], status?:string}} opts
  */
-export async function showResume(term, { dir, sessions: initial, openFolder = defaultOpen, running = runningSessions, remove = (id) => removeSession(dir, id) }) {
+export async function showResume(term, { dir, sessions: initial, status: initialStatus = '', openFolder = defaultOpen, running = runningSessions, remove = (id) => removeSession(dir, id) }) {
   let sessions = [...initial];
-  let status = '';
+  let status = initialStatus;
   let cur = 0;
   let off = 0;
   let page = 1;

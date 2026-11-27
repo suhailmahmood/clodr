@@ -28,7 +28,7 @@ Requirements: `claude` on `PATH`. Cleanup of orphaned projects needs Claude Code
 
 ## Usage
 
-Run `clodr` (arguments are ignored). It opens an arrow-key menu, most recent session activity first, with a cyan `●` on folders that have session(s). Clodr stays running while Claude does, then returns to a refreshed menu. `Ctrl+C` quits from any page.
+Run `clodr` (arguments are ignored). It opens an arrow-key menu, most recent session activity first, with a cyan `●` on folders that have session(s). Clodr stays running while Claude does, then returns to the refreshed session list for that folder (the menu if it has no sessions); `Esc` or `Backspace` goes on to the menu. `Ctrl+C` quits from any page.
 
 The menu opens on a **Search** field under the workspace path. Type to filter (case-insensitive): names starting with the text come first, then names containing it. `Esc` clears the text, `↓` moves into the list, `↑` at the top (or `Backspace`) goes back to search.
 
@@ -55,7 +55,7 @@ Config lives in `%APPDATA%\clodr\config.json` (Windows) or `~/.config/clodr/conf
 
 ### Session list
 
-`Enter` on a project that has sessions opens its session list, newest first. `Enter` resumes the highlighted session (`claude --resume <id>`). You can also create a new session from this screen with `n` (simply runs `calude`).
+`Enter` on a project that has sessions opens its session list, newest first. `Enter` resumes the highlighted session (`claude --resume <id>`). You can also create a new session from this screen with `n` (simply runs `claude`).
 
 ### Tabs
 

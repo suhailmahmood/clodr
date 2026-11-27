@@ -196,13 +196,44 @@ test('settings: Manage workspaces opens the workspaces page', async () => {
   assert.match(t.text, /Manage workspaces/);
 });
 
-test('runMenu: git prompt stays on the menu screen; menu comes back after claude exits', async () => {
+test('runMenu: git prompt stays on the menu screen; menu comes back after claude exits in a project without sessions', async () => {
   const before = stub.log().length;
   const t = fakeTerm().press('ctrl-n').type('Fresh Proj').press('enter', 'n').type('Alpha').press('down', 'enter', 'enter');   // new project, no git; then find Alpha and resume its session
-  await assert.rejects(runMenu(t), /ran out of keys/);                     // back at the menu, waiting for a key
+  await assert.rejects(runMenu(t), /ran out of keys/);
   assert.match(t.text, /Initialize git in Fresh-Proj\? \[Y\/n\]/);
   assert.equal(fs.existsSync(path.join(sb.root, 'Fresh-Proj', '.git')), false);
   assert.ok(stub.log().slice(before).includes('--resume a1'));
+});
+
+test('runMenu: the session list comes back after claude exits; Esc from it goes to the menu', async () => {
+  const before = stub.log().length;
+  const t = fakeTerm().type('Alpha').press('down', 'enter', 'enter', 'n', 'escape', 'ctrl-s');   // resume Alpha's session, new session from the list, then back to the menu
+  await assert.rejects(runMenu(t), /ran out of keys/);
+  const log = stub.log().slice(before);
+  assert.ok(log.includes('--resume a1'));
+  assert.equal(t.text.match(/Sessions in .*Alpha/g).length, 3);              // before the resume, after it, after the new session
+  assert.match(t.text, /Manage workspaces/);                                   // ctrl-s on the menu opened Settings
+});
+
+test('runMenu: a new session from the menu comes back to the session list too', async () => {
+  const t = fakeTerm().type('Alpha').press('down', 'n');
+  await assert.rejects(runMenu(t), /ran out of keys/);
+  assert.equal(t.text.match(/Sessions in .*Alpha/g).length, 1);              // only after claude exits
+});
+
+test('runMenu: a launch error shows on the session list, and on the menu when there are no sessions', async () => {
+  const saved = process.env.PATH;
+  process.env.PATH = '';                                                       // claude not found
+  try {
+    const t = fakeTerm().type('Alpha').press('down', 'enter', 'enter');
+    await assert.rejects(runMenu(t), /ran out of keys/);
+    assert.match(t.frames.at(-1), /Sessions in .*Alpha/);
+    assert.match(t.frames.at(-1), /claude not found on PATH/);
+    const m = fakeTerm().type('Beta').press('down', 'enter');                 // Beta has no sessions: Enter starts a new one
+    await assert.rejects(runMenu(m), /ran out of keys/);
+    assert.doesNotMatch(m.text, /Sessions in/);
+    assert.match(m.frames.at(-1), /claude not found on PATH/);
+  } finally { process.env.PATH = saved; }
 });
 
 test('resume screen: newest first, three rows each, Enter resumes, n starts new, Esc/Backspace go back', async () => {

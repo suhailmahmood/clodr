@@ -42,11 +42,11 @@ async function prepareProject(sel, term) {
   return dir;
 }
 
-// Leaves the menu screen, runs claude to completion, comes back to the menu screen.
+// Leaves the alt screen, runs claude to completion, comes back to the alt screen.
 // Claude's exit chatter ("Resume this session with: ...") lands on the main screen, below the cursor. Nothing
 // is cleared (a clear pushes lines into scrollback): reserve a few blank lines, remember the cursor, and after
 // claude exits jump back and erase downwards, so the chatter vanishes without touching scrollback.
-// Returns why claude could not start (shown in the menu), or ''.
+// Returns why claude could not start (shown in the next page's status row), or ''.
 const RESERVE = 5;
 async function runOutside(term, fn) {
   term.exitScreen();
@@ -55,15 +55,30 @@ async function runOutside(term, fn) {
   try { return (await fn()).error || ''; } finally { term.write('\x1b8\x1b[J'); term.start(); term.enterScreen(); }
 }
 
-/** Interactive menu loop: pick, run claude, return to the (refreshed) menu until the user quits. */
+/**
+ * Interactive menu loop until the user quits. Enter on a folder with sessions opens its session list; after
+ * claude exits, that project's session list comes back (the menu if the project has no sessions).
+ */
 export async function runMenu(term = createTerm()) {
   getConfig();                                 // a config warning prints here, before the screen takes over
   term.start();
   term.enterScreen();                          // one alt screen for every page
   let status = '';
+  let listFor = null;                          // {dir, sessions?}: session list to show next, instead of the menu
   const memo = {};                             // menu row to come back to
+  const run = async (dir, fn) => { status = await runOutside(term, fn); listFor = { dir }; };
   try {
     for (;;) {
+      if (listFor) {
+        const { dir, sessions = listSessions(dir) } = listFor;
+        listFor = null;
+        if (sessions.length) {
+          const pick = await showResume(term, { dir, sessions, status });
+          status = '';
+          if (pick) await run(dir, () => (pick.id ? resumeIn(dir, pick.id) : newSessionIn(dir)));
+          continue;                            // no pick (Esc/Bksp, or the last session deleted): the menu
+        }
+      }
       const cfg = getConfig();                 // re-read each pass: Settings may have changed it
       for (const w of cfg.workspaces) {
         if (!isDir(path.dirname(w.path))) continue;     // parent missing (unplugged drive): do not build the tree
@@ -74,21 +89,16 @@ export async function runMenu(term = createTerm()) {
       if (!sel) return 0;
       if (sel.kind === 'settings') { await showSettings(term); continue; }
       if (sel.kind === 'new') {
-        memo.path = null;                      // a new project has no row to return to yet
         const dir = await prepareProject(sel, term);
-        if (dir) status = await runOutside(term, () => runIn(dir, []));
-      } else {
-        let id = null;                         // null = new session
-        if (sel.mode === 'continue') {
-          const sessions = listSessions(sel.path);
-          if (sessions.length) {
-            const pick = await showResume(term, { dir: sel.path, sessions });
-            if (!pick) continue;               // back to the menu
-            id = pick.id;
-          }
+        if (dir) {
+          Object.assign(memo, { path: dir, query: '' });   // the menu comes back on the new project's row
+          await run(dir, () => newSessionIn(dir));
         }
-        status = await runOutside(term, () => (id ? resumeIn(sel.path, id) : newSessionIn(sel.path)));
+        continue;
       }
+      const sessions = sel.mode === 'continue' ? listSessions(sel.path) : [];
+      if (sessions.length) listFor = { dir: sel.path, sessions };
+      else await run(sel.path, () => newSessionIn(sel.path));
     }
   } finally { term.exitScreen(); term.stop(); }
 }
