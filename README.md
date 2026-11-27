@@ -7,13 +7,13 @@
 
 ![Clodr menu](https://raw.githubusercontent.com/suhailmahmood/clodr/master/screenshots/screenshot.svg)
 
-Clodr - manage all your Claude Code sessions from a single menu. No more cd-ing into your project folders just to start Claude Code from there. Just launch your terminal and then run `clodr` and all your Claude Sessions are at your fingertips! Creating throwaway sessions is now a breeze with Clodr! Clodrs also lets you clean up leftovers.
+Clodr - manage all your Claude Code sessions from a single menu. No more cd-ing into your project folders just to start Claude Code from there. Just launch your terminal and then run `clodr` and all your Claude Sessions are at your fingertips! Creating throwaway sessions is now a breeze with Clodr! Clodr also lets you clean up leftovers.
 
 Cross-platform (Windows, macOS, Linux), Node ≥ 18, zero dependencies.
 
 ## Install
 
-Needs Node ≥ 18 and git.
+Needs Node ≥ 18. git is optional (used to `git init` new projects).
 
 ```sh
 npm install -g clodr-cli
@@ -34,7 +34,7 @@ The menu opens on a **Search** field under the workspace path. Type to filter (c
 
 | Key | Where | Action |
 |---|---|---|
-| `Enter` | list | Opens the session list of the project: newest first, with name, age, size, estimated cost and id. The cost is what the session's API calls (subagents included) would cost at Claude API list prices; on a Pro or Max plan it is not what you were charged. The project's total sits next to the folder path at the top. A line under the key hints gives the date of the pricing used. `↑`/`↓` move, `Enter` resumes, `n` starts a new session, `e` explores the folder, `d` deletes the highlighted session after a `y/N` (its subagent transcripts and file edit history go with it; a running session is refused), `Esc` or `Backspace` goes back. With no session, starts a new one. |
+| `Enter` | list | Open the project's [session list](#session-list). With no session, starts a new one. |
 | `Ctrl+Enter` or `n` | list | Start a new session (`claude`). `Ctrl+Enter` needs a terminal that tells it from `Enter`; `n` always works. |
 | `e` | list | Explore: open the folder in the file manager (nothing listed: the workspace). |
 | `d` | list | Delete the folder and its Claude sessions after a red `[y/N]` (only `y` confirms). |
@@ -47,7 +47,7 @@ The menu opens on a **Search** field under the workspace path. Type to filter (c
 Letter shortcuts only act while the list has focus (in search, letters are typed); the Ctrl chords work from both. If Claude cannot start (not on `PATH`, folder gone), the reason shows in the menu status row. On every other page `Esc` or `Backspace` goes back.
 
 ### Workspace
-At the heart of Clodr is the concept called *Workspace*, which is just a folder containing your projects. Add as many workspace as you need. Your Claude Code sessions that do not belong to any of your defined Workspaces show up under *Everything else*.
+At the heart of Clodr is the concept called *Workspace*, which is just a folder containing your projects. Add as many workspaces as you need. Your Claude Code sessions that do not belong to any of your defined Workspaces show up under *Everything else*.
 
 Workspaces are managed inside Clodr (Settings › Manage workspaces). Until a config file exists it uses `~/Workspace`.
 
@@ -55,7 +55,9 @@ Config lives in `%APPDATA%\clodr\config.json` (Windows) or `~/.config/clodr/conf
 
 ### Session list
 
-`Enter` on a project that has sessions opens its session list, newest first. `Enter` resumes the highlighted session (`claude --resume <id>`). You can also create a new session from this screen with `n` (simply runs `claude`).
+`Enter` on a project that has sessions opens its session list, newest first, with name, age, size, estimated cost and id. The cost is what the session's API calls (subagents included) would cost at Claude API list prices; on a Pro or Max plan it is not what you were charged. The project's total sits next to the folder path at the top, and a line under the key hints gives the date of the pricing used.
+
+`↑`/`↓` move, `Enter` resumes the highlighted session (`claude --resume <id>`), `n` starts a new one (`claude`), `e` explores the folder, `d` deletes the highlighted session after a `y/N` (its subagent transcripts and file edit history go with it; a running session is refused), `Esc` or `Backspace` goes back.
 
 ### Tabs
 

@@ -1,5 +1,5 @@
 import { CATEGORIES, emptyScan, scanCleanup, planCleanup, executeCleanup, runningSessions } from '../cleanup.js';
-import { T, RESET, header, hintLine, numberedRow, step, bar, isYes, fit, paint } from './common.js';
+import { T, RESET, header, hintLine, numberedRow, step, bar, isYes, fit, paint, showBottom } from './common.js';
 import { LIVE } from './term.js';
 
 // "3 project(s), 1 backup file(s)": a count for every category.
@@ -101,7 +101,7 @@ export async function showCleanup(term, initial) {
       status = '';
       if (!CATEGORIES.some((x) => plan.items[x.id].length)) { status = 'Nothing to remove'; refresh(scanCleanup()); continue; }
       if (!(await preview(term, plan))) continue;
-      const res = executeCleanup(plan, (m) => { term.cursor(term.height - 1); term.write(`${T.yellow}${fit(m, term.width - 1).padEnd(term.width - 1)}${RESET}`); });
+      const res = executeCleanup(plan, (m) => showBottom(term, m));
       refresh(scanCleanup());
       status = res.error
         || (res.failures.length ? `Done with ${res.failures.length} failure(s): ${res.failures[0]}`

@@ -14,12 +14,10 @@ export async function showWorkspaces(term) {
   let status = '';
   let footerRow = 0;
 
-  const rows = () => list.map((w) => `${wsName(w)} - ${w.path}`);
-
   const draw = () => {
     const w = term.width - 1;
     const lines = header('Settings › Workspaces');
-    rows().forEach((r, i) => lines.push(numberedRow(i, r, w, i === cur ? T.clay : T.gray)));
+    list.forEach((x, i) => lines.push(numberedRow(i, `${wsName(x)} - ${x.path}`, w, i === cur ? T.clay : T.gray)));
     if (!list.length) lines.push(`${T.dim} No workspaces yet. Press a to add one.${RESET}`);
     lines.push('');
     footerRow = lines.length;
@@ -30,14 +28,13 @@ export async function showWorkspaces(term) {
   const save = () => saveConfig(config);
 
   const addWorkspace = async () => {
-    const w = term.width - 1;
-    const t = await readLine(term, footerRow, w, 'Workspace folder, full path (Esc to cancel)');
+    const t = await readLine(term, footerRow, 'Workspace folder, full path (Esc to cancel)');
     if (!t || !t.trim()) return;
     const p = expandPath(t);
     if (!path.isAbsolute(p)) { status = `Use a full path, e.g. ${WIN ? 'D:\\Workspace' : '/home/me/workspace'}`; return; }
     const full = trimSep(path.resolve(p));
     if (list.some((x) => pathKey(x.path) === pathKey(full))) { status = 'Already a workspace'; return; }
-    const name = await readLine(term, footerRow, w, `Name (Enter = '${path.basename(full) || full}', Esc to cancel)`);
+    const name = await readLine(term, footerRow, `Name (Enter = '${path.basename(full) || full}', Esc to cancel)`);
     if (name === null) return;
     try { fs.mkdirSync(full, { recursive: true }); } catch (e) { status = `Invalid path: ${e.message}`; return; }
     list.push(makeWorkspace(full, name.trim()));
@@ -50,31 +47,29 @@ export async function showWorkspaces(term) {
   for (;;) {
     const k = await term.readKey(LIVE);
     status = '';
-    const have = list.length > 0;
+    const ws = list[cur];                      // undefined when the list is empty
     const c = k.name === 'char' ? k.ch.toLowerCase() : '';
     if (k.name === 'up' || k.name === 'down') cur = step(cur, list.length, k.name);
     else if (k.name === 'escape' || k.name === 'backspace') return;
     else if (c === 'a') await addWorkspace();
-    else if (have && (k.name === 'ctrl-up' || k.name === 'ctrl-down')) {
+    else if (ws && (k.name === 'ctrl-up' || k.name === 'ctrl-down')) {
       const to = cur + (k.name === 'ctrl-up' ? -1 : 1);
       if (to >= 0 && to < list.length) {
         [list[cur], list[to]] = [list[to], list[cur]];
         cur = to;
         save();
       }
-    } else if (have && c === 'd') {
-      const w = list[cur];
-      if (await confirm(term, footerRow, term.width - 1, `Remove workspace '${wsName(w)}'? Its folder is kept. [y/N] `)) {
+    } else if (ws && c === 'd') {
+      if (await confirm(term, footerRow, `Remove workspace '${wsName(ws)}'? Its folder is kept. [y/N] `)) {
         list.splice(cur, 1);
         save();
         cur = Math.max(0, Math.min(cur, list.length - 1));
         status = 'Removed.';
       }
-    } else if (have && k.name === 'enter') {
-      const w = list[cur];
-      const t = await readLine(term, footerRow, term.width - 1, `Name for ${w.path} (empty = folder name, Esc to cancel)`);
+    } else if (ws && k.name === 'enter') {
+      const t = await readLine(term, footerRow, `Name for ${ws.path} (empty = folder name, Esc to cancel)`);
       if (t !== null) {
-        if (t.trim()) w.name = t.trim(); else delete w.name;
+        if (t.trim()) ws.name = t.trim(); else delete ws.name;
         save();
         status = 'Saved.';
       }

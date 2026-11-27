@@ -1,9 +1,9 @@
-// Screen pieces shared by the menu, settings, workspaces and cleanup screens. Screens build frames as arrays of
-// lines; the last line is the hint row. paint() writes the whole frame in a single write.
+// Screen pieces shared by every screen. Screens build frames as arrays of lines; paint() writes a whole frame in a
+// single write. Prompts take over one row of the frame.
 
 const e = '\x1b';
 export const RESET = `${e}[0m`;
-export const EL = `${e}[K`;
+const EL = `${e}[K`;
 export const T = {
   gray: `${e}[38;2;190;190;190m`,   // light gray (truecolor; palette gray follows the terminal theme)
   dim: `${e}[38;2;120;120;120m`,
@@ -24,8 +24,7 @@ const LETTERS = [
   ['┌─╮', '├─╯', '│ \\'],   // R
 ];
 
-export const logoLines = () =>
-  [0, 1, 2].map((r) => `${T.clay} ${LETTERS.map((l) => l[r]).join(' ')}${RESET}`);
+const logoLines = () => [0, 1, 2].map((r) => `${T.clay} ${LETTERS.map((l) => l[r]).join(' ')}${RESET}`);
 
 export const fit = (s, width) => (s.length > width ? s.slice(0, width) : s);
 
@@ -35,9 +34,11 @@ export const header = (title) => [...logoLines(), `${T.gray} ${title}${RESET}`, 
 // Bottom hint line; a status message replaces the hint (yellow). Cut to the width.
 export const hintLine = (hint, status, width) => `${status ? T.yellow : T.gray}${fit(status || hint, width)}${RESET}`;
 
+// " 12. ": the number column of list rows.
+export const rowNumber = (i) => `${String(i + 1).padStart(3)}. `;
+
 // A list row: " 12. text", cut to the width.
-export const numberedRow = (i, text, width, color = T.gray) =>
-  `${color}${fit(`${String(i + 1).padStart(3)}. ${text}`, width)}${RESET}`;
+export const numberedRow = (i, text, width, color = T.gray) => `${color}${fit(rowNumber(i) + text, width)}${RESET}`;
 
 // Cursor movement in a wrapping list of n rows.
 export function step(cur, n, keyName) {
@@ -57,17 +58,34 @@ export function paint(term, lines) {
   term.write(lines.map((l) => l + EL).join('\r\n') + `${e}[J`);
 }
 
-// Red y/N bar on the hint row. True only for y/Y.
-export async function confirm(term, row, width, question) {
+// Yellow message across the bottom row of the current frame.
+export function showBottom(term, text) {
+  const w = term.width - 1;
+  term.cursor(term.height - 1);
+  term.write(`${T.yellow}${fit(text, w).padEnd(w)}${RESET}`);
+}
+
+// Yes/no on the bottom row. Enter or y = yes, n = no.
+export async function askYesNo(term, question) {
+  showBottom(term, question);
+  for (;;) {
+    const k = await term.readKey();
+    if (k.name === 'enter' || isYes(k)) return true;
+    if (k.ch === 'n' || k.ch === 'N') return false;
+  }
+}
+
+// Red y/N bar on the given row. True only for y/Y.
+export async function confirm(term, row, question) {
   term.cursor(row);
-  term.write(bar(question, width));
+  term.write(bar(question, term.width - 1));
   return isYes(await term.readKey());
 }
 
-// Prompt on the hint row. Returns the text, or null on Esc.
-export async function readLine(term, row, width, prompt) {
+// Prompt on the given row. Returns the text, or null on Esc.
+export async function readLine(term, row, prompt) {
   term.cursor(row);
-  term.write(' '.repeat(width));
+  term.write(' '.repeat(term.width - 1));
   term.cursor(row);
   term.cursorVisible(true);
   term.write(`${prompt}: `);

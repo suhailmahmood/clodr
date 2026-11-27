@@ -28,7 +28,7 @@ saveConfig({ workspaces, view: '' });
 
 const term = fakeTerm({ width: 96, height: 24 }).press('down', 'ctrl-s');
 await selectEntry(term, { workspaces, view: '' });
-const frame = term.last.split(root).join('D:' + String.fromCharCode(92) + 'Workspace');
+const frame = term.last.split(root).join('D:\\Workspace');
 sb.cleanup();
 
 // ANSI -> spans

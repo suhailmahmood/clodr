@@ -4,22 +4,23 @@ import { projectDir, relPath, pathKey } from '../paths.js';
 import { TAGLINE } from '../text.js';
 import { globalFolders, workspaceFolders, outsideFolders, sessionCount, removeFolder, removeSessions } from '../sessions.js';
 import { openFolder as defaultOpen } from '../open.js';
-import { T, RESET, header, hintLine, fit, step, paint, confirm, readLine } from './common.js';
+import { T, RESET, header, hintLine, rowNumber, fit, step, paint, confirm, readLine } from './common.js';
 import { renderTabs } from './tabs.js';
 import { LIVE } from './term.js';
 
 const BLINK_MS = 530;
 const PLACEHOLDER = 'type to search...';
 
-// Two hint lines. Row 1 = what acts on a project; row 2 = navigation and global. Search focus types; list focus runs one-key actions.
-const HINT_SEARCH = ['Type to search | Esc clear | ↓ choose a project', '←/→ tab | ↑/↓ move | ^N new project | ^S settings | ^C quit | ● = has session(s)'];
-const HINT_LIST = ['Enter continue | n new session | e explore | d delete', '←/→ tab | ↑/↓ move | ^N new project | ^S settings | ^C quit | ● = has session(s)'];
+// Two hint lines: what acts on a project (search focus types, list focus runs one-key actions), then navigation.
+const HINT_SEARCH = 'Type to search | Esc clear | ↓ choose a project';
+const HINT_LIST = 'Enter continue | n new session | e explore | d delete';
+const HINT_NAV = '←/→ tab | ↑/↓ move | ^N new project | ^S settings | ^C quit | ● = has session(s)';
 
 /**
  * Main menu: one tab per workspace, then "Everything else".
- * Resolves to {kind:'folder',path,mode:'continue'|'new'} | {kind:'new',name,root} | {kind:'settings'} | null (quit).
- * @param {object} term
+ * Resolves to {kind:'folder',path,mode:'continue'|'new'} | {kind:'new',name,root} | {kind:'settings'}.
  * `memo` carries the selected project and search text between calls: written when the menu is left, read to come back to the same row.
+ * @param {object} term
  * @param {{workspaces:{path:string,name?:string}[], view?:string, status?:string, memo?:{path?:string,query?:string}, openFolder?:(p:string)=>void}} opts
  */
 export async function selectEntry(term, { workspaces, view = '', status: initialStatus = '', memo = {}, openFolder = defaultOpen }) {
@@ -27,7 +28,7 @@ export async function selectEntry(term, { workspaces, view = '', status: initial
   let tab = Math.max(0, tabs.findIndex((t) => (t.ws ? pathKey(t.ws.path) === pathKey(view) : view === ELSE)));   // unknown view: first tab
   const cache = {};                       // tab id -> folder list, loaded on first visit
   let all = null;                         // one scan of every session dir serves every tab
-  let base = [];                          // every folder of the tab
+  let base = [];                          // every folder of the tab: {name, leaf, parent, path, sessions, projDir?}
   let items = [];                         // base filtered by the search text
   let query = '';
   let focus = 'search';                   // 'search' | 'list'
@@ -46,11 +47,8 @@ export async function selectEntry(term, { workspaces, view = '', status: initial
       all ??= globalFolders();
       cache[id()] = ws() ? workspaceFolders(ws().path, all, nestedIn(workspaces, ws())) : outsideFolders(workspaces.map((w) => w.path), all);
     }
-    base = cache[id()].map((f) => ({
-      name: f.name, leaf: ws() ? '' : f.leaf, parent: ws() ? '' : f.parent,
-      path: f.path, projDir: f.projDir, session: f.sessions > 0,
-    }));
-    leafLen = ws() ? 0 : Math.max(0, ...base.map((i) => i.leaf.length));
+    base = cache[id()];
+    leafLen = Math.max(0, ...base.map((i) => i.leaf.length));   // 0 on a workspace tab: names only
     query = ''; focus = 'search';
     refilter();
   };
@@ -96,13 +94,14 @@ export async function selectEntry(term, { workspaces, view = '', status: initial
     cur = Math.min(cur, Math.max(0, items.length - 1));
     off = Math.max(0, Math.min(off, items.length - page));
     if (cur < off) off = cur; else if (cur >= off + page) off = cur - page + 1;
-    const leafW = !ws() ? Math.min(leafLen, Math.max(10, Math.min(30, Math.floor((w - 4 - 2) / 2)))) : 0;
+    const leafW = Math.min(leafLen, Math.max(10, Math.min(30, Math.floor((w - 4 - 2) / 2))));
 
     for (let row = 0; row < page; row++) {
       const i = off + row;
       if (i >= items.length) { lines.push(''); continue; }
       const it = items[i];
-      const prefix = `${String(i + 1).padStart(3)}. `;
+      const prefix = rowNumber(i);
+      const dot = it.sessions > 0;
       let leaf = it.leaf;
       if (leaf && leaf.length > leafW) leaf = `${leaf.slice(0, leafW - 1)}…`;
       let rest = leaf ? (it.parent ? ` ${leaf.padEnd(leafW)}  ${it.parent}` : ` ${leaf}`) : ` ${it.name}`;
@@ -110,35 +109,31 @@ export async function selectEntry(term, { workspaces, view = '', status: initial
       const lead = it.leaf ? rest.slice(0, Math.max(leaf.length, leafW) + 1) : rest;
       const tail = rest.slice(lead.length);
       if (i === cur && focus === 'list') {
-        lines.push(`${T.clay}${prefix}${it.session ? '●' : ' '}${lead}${tail}${RESET}`);   // orange text, no background
+        lines.push(`${T.clay}${prefix}${dot ? '●' : ' '}${lead}${tail}${RESET}`);   // orange text, no background
       } else {
-        const mark = it.session ? `${T.cyan}●${T.gray}` : ' ';
-        lines.push(`${T.gray}${prefix}${mark}${lead}${it.leaf ? T.dim : T.gray}${tail}${RESET}`);
+        lines.push(`${T.gray}${prefix}${dot ? `${T.cyan}●${T.gray}` : ' '}${lead}${it.leaf ? T.dim : T.gray}${tail}${RESET}`);
       }
     }
     lines.push('');
-    const [h1, h2] = focus === 'search' ? HINT_SEARCH : HINT_LIST;
-    lines.push(hintLine(h1, '', w));
+    lines.push(hintLine(focus === 'search' ? HINT_SEARCH : HINT_LIST, '', w));
     footerRow = lines.length;                // prompts and status take the second hint line
-    lines.push(hintLine(h2, status, w));
+    lines.push(hintLine(HINT_NAV, status, w));
     paint(term, lines);
   };
 
   const prune = (it) => {                  // workspace tab: deleting a folder also drops the deeper session folders under it
-    const survives = (p) => (ws() ? relPath(p, it.path) === null : pathKey(p) !== pathKey(it.path));
-    cache[id()] = cache[id()].filter((f) => survives(f.path));
-    base = base.filter((x) => survives(x.path));
-    items = items.filter((x) => survives(x.path));
+    const survives = (f) => (ws() ? relPath(f.path, it.path) === null : pathKey(f.path) !== pathKey(it.path));
+    cache[id()] = base = base.filter(survives);
+    items = items.filter(survives);
   };
 
   const doDelete = async () => {
     const it = items[cur];
     const n = sessionCount(it.path);
-    const width = term.width - 1;
     const q = !ws()
       ? `Delete ${n} Claude session(s) of '${it.leaf}'? The folder is kept. [y/N] `   // leaf: a full path would push the message off-screen
       : `Delete '${it.name}' and ${n} Claude session(s)? This cannot be undone. [y/N] `;
-    if (!(await confirm(term, footerRow, width, q))) return;
+    if (!(await confirm(term, footerRow, q))) return;
     const err = !ws() ? removeSessions(it.path, it.projDir) : removeFolder(it.path, ws().path, workspaces.map((x) => x.path));
     status = err || (!ws() ? `Deleted sessions of ${it.name}` : `Deleted ${it.name}`);
     const gone = !ws() ? !fs.existsSync(it.projDir || projectDir(it.path)) : !fs.existsSync(it.path);
@@ -197,7 +192,7 @@ export async function selectEntry(term, { workspaces, view = '', status: initial
     }
     if (wantNew && !ws()) status = workspaces.length ? 'Switch to a workspace tab to start a project' : 'Add a workspace in Settings first';
     else if (wantNew) {
-      const t = await readLine(term, footerRow, term.width - 1, 'New project (Esc to cancel)');
+      const t = await readLine(term, footerRow, 'New project (Esc to cancel)');
       if (t && t.trim()) return { kind: 'new', name: t, root: ws().path };
     }
     if (wantDelete && items.length) await doDelete();

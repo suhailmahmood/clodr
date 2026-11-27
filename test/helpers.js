@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { encodeDir } from '../src/paths.js';
+import { WIN } from '../src/platform.js';
 
 // Isolated Claude + Clodr homes in a temp dir; env vars point everything there.
 export function sandbox() {
@@ -64,11 +65,8 @@ if (a[0] === 'purge' && a.includes('--dry-run')) {
   console.log('\\nPurge plan for ' + a[1] + ':\\n\\n  dir:    X\\\\projects\\\\p\\n           project transcripts (.jsonl) and memory/\\n  config: projects["x"]\\n           project entry in ~/.claude.json\\n  filter: X\\\\history.jsonl\\n           7 prompt(s) typed in this project\\n\\nDry run: 3 item(s) would be deleted.');
 }
 `);
-  const shim = process.platform === 'win32'
-    ? path.join(bin, 'claude.cmd')
-    : path.join(bin, 'claude');
-  fs.writeFileSync(shim, process.platform === 'win32' ? `@node "${js}" %*\r\n` : `#!/bin/sh\nexec node "${js}" "$@"\n`);
-  if (process.platform !== 'win32') fs.chmodSync(shim, 0o755);
+  if (WIN) fs.writeFileSync(path.join(bin, 'claude.cmd'), `@node "${js}" %*\r\n`);
+  else fs.writeFileSync(path.join(bin, 'claude'), `#!/bin/sh\nexec node "${js}" "$@"\n`, { mode: 0o755 });
   process.env.PATH = `${bin}${path.delimiter}${process.env.PATH}`;
   process.env.STUB_LOG = path.join(base, 'stub.log');
   delete process.env.STUB_NO_PURGE;

@@ -10,42 +10,25 @@ import { selectEntry } from './ui/menu.js';
 import { showSettings } from './ui/settings.js';
 import { showResume } from './ui/resume.js';
 import { createTerm } from './ui/term.js';
-import { T, RESET } from './ui/common.js';
+import { askYesNo } from './ui/common.js';
 
+const resumeIn = (dir, id) => launchClaude(dir, ['--resume', id]);
+const newSessionIn = (dir) => launchClaude(dir);
 
-const runIn = (dir, args) => launchClaude(dir, args);
-
-export const resumeIn = (dir, id) => runIn(dir, ['--resume', id]);
-
-export const newSessionIn = (dir) => runIn(dir, []);
-
-// Yes/no on the bottom row of the current screen. Enter or y = yes, n = no.
-async function askYesNo(term, text) {
-  const w = term.width - 1;
-  term.cursor(term.height - 1);
-  term.write(`${T.yellow}${text.slice(0, w).padEnd(w)}${RESET}`);
-  for (;;) {
-    const k = await term.readKey();
-    if (k.name === 'enter' || k.ch === 'y' || k.ch === 'Y') return true;
-    if (k.ch === 'n' || k.ch === 'N') return false;
-  }
-}
-
-// Creates the project folder (asking about git on the menu screen) and returns its path, or null.
+// Creates the project folder, asking about git on the menu screen. Returns {dir, gitError}, or null for an unusable name.
 async function prepareProject(sel, term) {
   const name = kebabName(sel.name);
   if (!name) return null;
   const dir = path.join(sel.root, name);
   const isNew = !fs.existsSync(dir);
   fs.mkdirSync(dir, { recursive: true });
-  if (isNew && await askYesNo(term, `Initialize git in ${name}? [Y/n] `)) initGit(dir);
-  return dir;
+  const gitError = isNew && await askYesNo(term, `Initialize git in ${name}? [Y/n] `) ? initGit(dir) : '';
+  return { dir, gitError };
 }
 
-// Leaves the alt screen, runs claude to completion, comes back to the alt screen.
-// Claude's exit chatter ("Resume this session with: ...") lands on the main screen, below the cursor. Nothing
-// is cleared (a clear pushes lines into scrollback): reserve a few blank lines, remember the cursor, and after
-// claude exits jump back and erase downwards, so the chatter vanishes without touching scrollback.
+// Runs claude to completion on the main screen, then returns to the alt screen. Claude's exit chatter ("Resume
+// this session with: ...") is erased without a clear, which would push lines into scrollback: reserve a few blank
+// lines, save the cursor, and erase downwards from it afterwards.
 // Returns why claude could not start (shown in the next page's status row), or ''.
 const RESERVE = 5;
 async function runOutside(term, fn) {
@@ -56,8 +39,8 @@ async function runOutside(term, fn) {
 }
 
 /**
- * Interactive menu loop until the user quits. Enter on a folder with sessions opens its session list; after
- * claude exits, that project's session list comes back (the menu if the project has no sessions).
+ * Interactive menu loop; ^C exits from the terminal layer. Enter on a folder with sessions opens its session list;
+ * after claude exits, that project's session list comes back (the menu if the project has no sessions).
  */
 export async function runMenu(term = createTerm()) {
   getConfig();                                 // a config warning prints here, before the screen takes over
@@ -86,13 +69,13 @@ export async function runMenu(term = createTerm()) {
       }
       const sel = await selectEntry(term, { workspaces: cfg.workspaces, view: cfg.view, status, memo });
       status = '';
-      if (!sel) return 0;
       if (sel.kind === 'settings') { await showSettings(term); continue; }
       if (sel.kind === 'new') {
-        const dir = await prepareProject(sel, term);
-        if (dir) {
-          Object.assign(memo, { path: dir, query: '' });   // the menu comes back on the new project's row
-          await run(dir, () => newSessionIn(dir));
+        const p = await prepareProject(sel, term);
+        if (p) {
+          Object.assign(memo, { path: p.dir, query: '' });   // the menu comes back on the new project's row
+          await run(p.dir, () => newSessionIn(p.dir));
+          status ||= p.gitError;
         }
         continue;
       }

@@ -6,7 +6,7 @@ import { messageCost } from './pricing.js';
 
 export const STATE = { OK: 'ok', GONE: 'gone', UNKNOWN: 'unknown', OFFLINE: 'offline' };
 
-// Transcripts of a session dir, newest first.
+// Transcripts of a session dir, newest first: {file, mtime, size}.
 function transcripts(projDir) {
   let names;
   try { names = fs.readdirSync(projDir); } catch { return []; }
@@ -15,7 +15,7 @@ function transcripts(projDir) {
     if (!name.endsWith('.jsonl')) continue;
     try {
       const st = fs.statSync(path.join(projDir, name));
-      if (st.isFile()) out.push({ file: path.join(projDir, name), mtime: st.mtime });
+      if (st.isFile()) out.push({ file: path.join(projDir, name), mtime: st.mtime, size: st.size });
     } catch { /* vanished */ }
   }
   return out.sort((a, b) => b.mtime - a.mtime);
@@ -23,20 +23,25 @@ function transcripts(projDir) {
 
 export const sessionCount = (dir) => transcripts(projectDir(dir)).length;
 
+// Text of byte ranges [pos, len] of a file. Throws if it cannot be read.
+function readParts(file, ...ranges) {
+  const fd = fs.openSync(file, 'r');
+  try {
+    return ranges.map(([pos, len]) => {
+      const buf = Buffer.alloc(len);
+      return buf.subarray(0, fs.readSync(fd, buf, 0, len, pos)).toString('utf8');
+    });
+  } finally { fs.closeSync(fd); }
+}
+
 const HEAD = 64 * 1024;
 const TAIL = 256 * 1024;
 
-// Both ends of a file as text. Titles are appended late and re-appended, the first prompt is near the start.
+// Both ends of a file. Titles are appended late and re-appended, the first prompt is near the start.
 function readEnds(file, size) {
-  const fd = fs.openSync(file, 'r');
-  try {
-    const part = (pos, len) => {
-      const buf = Buffer.alloc(len);
-      return buf.subarray(0, fs.readSync(fd, buf, 0, len, pos)).toString('utf8');
-    };
-    if (size <= HEAD + TAIL) return { head: part(0, size), tail: '' };
-    return { head: part(0, HEAD), tail: part(size - TAIL, TAIL) };
-  } finally { fs.closeSync(fd); }
+  if (size <= HEAD + TAIL) return { head: readParts(file, [0, size])[0], tail: '' };
+  const [head, tail] = readParts(file, [0, HEAD], [size - TAIL, TAIL]);
+  return { head, tail };
 }
 
 const jsonLines = (text) => text.split('\n').flatMap((l) => { try { return [JSON.parse(l)]; } catch { return []; } });   // cut-off edge lines drop out
@@ -82,7 +87,21 @@ function transcriptCost(file) {
 
 // Costs are kept in the config dir per transcript file, recomputed only when its size or time changes.
 const costCacheFile = () => path.join(configDir(), 'costs.json');
-let costCache = null;
+let costCache = null;                    // {files: {[file]: {size, mtimeMs, usd}}, dirty}
+
+function loadCostCache() {
+  try { costCache = { files: JSON.parse(fs.readFileSync(costCacheFile(), 'utf8')).files || {} }; } catch { costCache = { files: {} }; }
+}
+
+function saveCostCache() {
+  if (!costCache.dirty) return;
+  for (const f of Object.keys(costCache.files)) if (!fs.existsSync(f)) delete costCache.files[f];
+  try {
+    fs.mkdirSync(configDir(), { recursive: true });
+    fs.writeFileSync(costCacheFile(), JSON.stringify({ files: costCache.files }));
+    costCache.dirty = false;
+  } catch { /* cache only: recomputed next time */ }
+}
 
 function cachedCost(file) {
   let st;
@@ -103,20 +122,6 @@ function sessionCost(projDir, id) {
   return [path.join(projDir, `${id}.jsonl`), ...names.map((n) => path.join(sub, n))].reduce((sum, f) => sum + cachedCost(f), 0);
 }
 
-function loadCostCache() {
-  try { costCache = { files: JSON.parse(fs.readFileSync(costCacheFile(), 'utf8')).files || {} }; } catch { costCache = { files: {} }; }
-}
-
-function saveCostCache() {
-  if (!costCache.dirty) return;
-  for (const f of Object.keys(costCache.files)) if (!fs.existsSync(f)) delete costCache.files[f];
-  try {
-    fs.mkdirSync(configDir(), { recursive: true });
-    fs.writeFileSync(costCacheFile(), JSON.stringify({ files: costCache.files }));
-    costCache.dirty = false;
-  } catch { /* cache only: recomputed next time */ }
-}
-
 /**
  * Sessions of a folder, newest first. title is '' when the transcript has nothing to name it by.
  * cost is the estimated USD cost at API prices, subagents included.
@@ -126,9 +131,7 @@ export function listSessions(dir) {
   const pd = projectDir(dir);
   if (!costCache) loadCostCache();
   const out = [];
-  for (const { file, mtime } of transcripts(pd)) {
-    let size;
-    try { size = fs.statSync(file).size; } catch { continue; }
+  for (const { file, mtime, size } of transcripts(pd)) {
     const id = path.basename(file, '.jsonl');
     out.push({ id, title: sessionTitle(file, size), mtime, size, cost: sessionCost(pd, id) });
   }
@@ -146,16 +149,10 @@ function activity(dir) {
 
 // Real folder of a session dir: the "cwd" in its transcripts (the dir name encoding is lossy).
 // It is not on the first line, so look at the first few.
-export function sessionCwd(projDir) {
+function sessionCwd(projDir) {
   for (const { file } of transcripts(projDir)) {
     let head;
-    try {
-      const fd = fs.openSync(file, 'r');
-      try {
-        const buf = Buffer.alloc(256 * 1024);
-        head = buf.subarray(0, fs.readSync(fd, buf, 0, buf.length, 0)).toString('utf8');
-      } finally { fs.closeSync(fd); }
-    } catch { continue; }
+    try { [head] = readParts(file, [0, 256 * 1024]); } catch { continue; }
     for (const line of head.split('\n', 60)) {
       const m = /"cwd":("(?:[^"\\]|\\.)*")/.exec(line);
       if (m) { try { return JSON.parse(m[1]); } catch { /* try next line */ } }
@@ -195,7 +192,8 @@ export function globalFolders() {
   return found.filter((f) => { const k = pathKey(f.path); if (seen.has(k)) return false; seen.add(k); return true; });
 }
 
-// Workspace view: every folder directly inside the workspace, plus deeper folders that have a session.
+// Workspace view: every folder directly inside the workspace, plus deeper folders that have a session. Named by
+// their path relative to the workspace (leaf and parent stay '').
 // `nested` = workspaces inside this one: everything rooted there belongs to them, not to this workspace.
 export function workspaceFolders(root, all = globalFolders(), nested = []) {
   const taken = (p) => nested.some((n) => relPath(p, n.path) !== null);
@@ -203,7 +201,7 @@ export function workspaceFolders(root, all = globalFolders(), nested = []) {
   try {
     direct = fs.readdirSync(root, { withFileTypes: true })
       .filter((d) => d.isDirectory() && !taken(path.join(root, d.name)))
-      .map((d) => { const p = path.join(root, d.name); return { name: d.name, leaf: d.name, parent: '', path: p, ...activity(p) }; });
+      .map((d) => { const p = path.join(root, d.name); return { name: d.name, leaf: '', parent: '', path: p, ...activity(p) }; });
   } catch { /* no root yet */ }
   const deeper = [];
   for (const f of all) {

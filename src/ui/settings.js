@@ -14,15 +14,15 @@ const PAGES = [
     run: (term) => showWorkspaces(term),
   },
   {
-    label: (state) => `Cleanup: ${tally(state.counts)} (Enter to review / delete)`,
-    run: async (term, state) => { state.counts = await showCleanup(term, state.counts); },
+    label: (state) => `Cleanup: ${tally(state.scan)} (Enter to review / delete)`,
+    run: async (term, state) => { state.scan = await showCleanup(term, state.scan); },
   },
 ];
 
 /** Settings screen: a menu of sub-pages. */
 export async function showSettings(term) {
   let cur = 0;
-  const state = { counts: scanCleanup() };      // scans every session dir: done on entry; Cleanup hands back a fresh one
+  const state = { scan: scanCleanup() };        // scans every session dir: done on entry; Cleanup hands back a fresh one
 
   const draw = () => {
     const w = term.width - 1;

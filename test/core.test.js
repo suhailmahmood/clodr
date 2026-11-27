@@ -22,8 +22,8 @@ test('kebabName', () => {
 });
 
 test('expandPath', () => {
-  process.env.CM_TEST_VAR = 'zz';
-  assert.equal(expandPath('%CM_TEST_VAR%/x'), 'zz/x');
+  process.env.CLODR_TEST_VAR = 'zz';
+  assert.equal(expandPath('%CLODR_TEST_VAR%/x'), 'zz/x');
   assert.ok(expandPath('~/x').endsWith('x') && !expandPath('~/x').startsWith('~'));
 });
 

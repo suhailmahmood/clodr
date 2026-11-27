@@ -96,7 +96,7 @@ function claudeJsonProjectKeys() {
   } catch { return []; }
 }
 
-export function legacyBackups() {
+function legacyBackups() {
   const dir = path.dirname(claudeJsonPath());
   const prefix = `${path.basename(claudeJsonPath())}.backup`;
   let names;
@@ -115,7 +115,7 @@ export function legacyBackups() {
  * Each has the path handed to `claude purge` (null if none can be derived).
  * @returns {{label:string,purgePath:string|null,source:string}[]}
  */
-export function scanOrphans() {
+function scanOrphans() {
   const orphans = [];
   const seen = new Set();
   for (const f of globalFolders()) {
@@ -202,7 +202,7 @@ function backupFile(file) {
  * scan(): items found. plan(items): optional async refinement -> {items, skipped}.
  * reviewTitle, reviewLines(item): the review screen. note: shown there when the category has items.
  * backsUp: keeps .bak copies of ~/.claude.json and history.jsonl before it runs.
- * run(items, progress): -> {done, failures}.
+ * progress(item, i, n): status line while an item is removed. remove(item): '' on success, else why it failed.
  */
 const ORPHANS = {
   id: 'orphans',
@@ -217,15 +217,10 @@ const ORPHANS = {
   reviewLines: (o) => [`  ${o.label}`, `    ${o.summary}${o.partial ? ' (partial: config entry / prompts may remain)' : ''}`],
   note: 'A copy of ~/.claude.json and history.jsonl is kept as .bak first.',
   backsUp: true,
-  run(items, progress) {
-    const out = { done: 0, failures: [] };
-    items.forEach((o, i) => {
-      progress(`Purging ${i + 1}/${items.length}: ${o.label}`);
-      const r = runClaudeSync(['purge', o.purgePath, '--yes']);
-      if (r.ok) out.done++;
-      else out.failures.push(`${o.label}: ${(r.err || r.out).trim().split(/\r?\n/)[0] || `exit ${r.code}`}`);
-    });
-    return out;
+  progress: (o, i, n) => `Purging ${i + 1}/${n}: ${o.label}`,
+  remove(o) {
+    const r = runClaudeSync(['purge', o.purgePath, '--yes']);
+    return r.ok ? '' : `${o.label}: ${(r.err || r.out).trim().split(/\r?\n/)[0] || `exit ${r.code}`}`;
   },
 };
 
@@ -238,13 +233,9 @@ const BACKUPS = {
   scan: legacyBackups,
   reviewTitle: 'Legacy ~/.claude.json backups:',
   reviewLines: (b) => [`  ${b.file}  (${formatSize(b.size)})`],
-  run(items, progress) {
-    const out = { done: 0, failures: [] };
-    for (const b of items) {
-      progress(`Deleting ${path.basename(b.file)}`);
-      try { fs.rmSync(b.file, { force: true }); out.done++; } catch (e) { out.failures.push(`${b.file}: ${e.message}`); }
-    }
-    return out;
+  progress: (b) => `Deleting ${path.basename(b.file)}`,
+  remove(b) {
+    try { fs.rmSync(b.file, { force: true }); return ''; } catch (e) { return `${b.file}: ${e.message}`; }
   },
 };
 
@@ -292,10 +283,11 @@ export function executeCleanup(plan, onProgress = () => {}) {
   }
   for (const c of CATEGORIES) {
     const items = itemsOf(plan, c);
-    if (!items.length) continue;
-    const r = c.run(items, onProgress);
-    res.done[c.id] = r.done;
-    res.failures.push(...r.failures);
+    items.forEach((it, i) => {
+      onProgress(c.progress(it, i, items.length));
+      const err = c.remove(it);
+      if (err) res.failures.push(err); else res.done[c.id]++;
+    });
   }
   return res;
 }

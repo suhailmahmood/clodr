@@ -3,7 +3,8 @@ import { openFolder as defaultOpen } from '../open.js';
 import { removeSession } from '../sessions.js';
 import { PRICED_AS_OF, formatCost } from '../pricing.js';
 import { runningSessions } from '../cleanup.js';
-import { T, RESET, header, hintLine, fit, step, paint, confirm } from './common.js';
+import { T, RESET, header, hintLine, rowNumber, fit, step, paint, confirm } from './common.js';
+import { LIVE } from './term.js';
 
 const HINT = '↑/↓ move | Enter resume | n new session | e explore | d delete | Esc/Bksp back | ^C quit';
 const AGE_W = 14;        // "59 minutes ago"
@@ -33,18 +34,18 @@ export async function showResume(term, { dir, sessions: initial, status: initial
   const draw = () => {
     const w = term.width - 1;
     const lines = header(TAGLINE);
-    const total = ` · ${formatCost(sessions.reduce((sum, s) => sum + (s.cost || 0), 0))} total`;
-    lines.push(`${T.dim} Sessions in ${fit(dir, w - 13 - total.length)}${total}${RESET}`, '');
+    const label = ' Sessions in ';
+    const total = ` · ${formatCost(sessions.reduce((sum, s) => sum + s.cost, 0))} total`;
+    lines.push(`${T.dim}${label}${fit(dir, w - label.length - total.length)}${total}${RESET}`, '');
     page = Math.max(1, Math.min(sessions.length, Math.floor((term.height - lines.length - 3) / ROWS)));
     if (cur < off) off = cur; else if (cur >= off + page) off = cur - page + 1;
     off = Math.max(0, Math.min(off, sessions.length - page));
     for (let i = off; i < off + page; i++) {
       const s = sessions[i];
-      const prefix = `${String(i + 1).padStart(3)}. `;
-      const pad = ' '.repeat(prefix.length);
+      const prefix = rowNumber(i);
       const title = clip(s.title || '(untitled)', w - prefix.length);
-      const meta = fit(`${timeAgo(s.mtime).padEnd(AGE_W)} · ${formatSize(s.size).padEnd(SIZE_W)} · ${formatCost(s.cost || 0).padEnd(COST_W)} · ${s.id}`, w - prefix.length);
-      lines.push(`${i === cur ? T.clay : T.gray}${prefix}${title}${RESET}`, `${T.dim}${pad}${meta}${RESET}`, '');   // only the name highlights
+      const meta = fit(`${timeAgo(s.mtime).padEnd(AGE_W)} · ${formatSize(s.size).padEnd(SIZE_W)} · ${formatCost(s.cost).padEnd(COST_W)} · ${s.id}`, w - prefix.length);
+      lines.push(`${i === cur ? T.clay : T.gray}${prefix}${title}${RESET}`, `${T.dim}${' '.repeat(prefix.length)}${meta}${RESET}`, '');   // only the name highlights
     }
     hintRow = lines.length;
     lines.push(hintLine(HINT, status, w), `${T.dim}${fit(PRICING_NOTE, w)}${RESET}`);
@@ -54,8 +55,7 @@ export async function showResume(term, { dir, sessions: initial, status: initial
   const deleteCurrent = async () => {
     const s = sessions[cur];
     if (running().some((r) => r.sessionId === s.id)) return 'Session is running. Close it first.';
-    const q = `Delete session ${s.id}? This cannot be undone. [y/N] `;
-    if (!(await confirm(term, hintRow, term.width - 1, q))) return '';
+    if (!(await confirm(term, hintRow, `Delete session ${s.id}? This cannot be undone. [y/N] `))) return '';
     const err = remove(s.id);
     if (err) return err;
     sessions = sessions.filter((x) => x !== s);
@@ -65,9 +65,10 @@ export async function showResume(term, { dir, sessions: initial, status: initial
 
   draw();
   for (;;) {
-    const k = await term.readKey({ live: true });
+    const k = await term.readKey(LIVE);
     status = '';
     const last = sessions.length - 1;
+    const c = k.name === 'char' ? k.ch.toLowerCase() : '';
     switch (k.name) {
       case 'up': case 'down': cur = step(cur, sessions.length, k.name); break;
       case 'home': cur = 0; break;
@@ -77,9 +78,9 @@ export async function showResume(term, { dir, sessions: initial, status: initial
       case 'enter': return { id: sessions[cur].id };
       case 'escape': case 'backspace': return null;
       case 'char':
-        if (k.ch.toLowerCase() === 'n') return { id: null };
-        if (k.ch.toLowerCase() === 'e') openFolder(dir);
-        if (k.ch.toLowerCase() === 'd') {
+        if (c === 'n') return { id: null };
+        if (c === 'e') openFolder(dir);
+        else if (c === 'd') {
           status = await deleteCurrent();
           if (!sessions.length) return null;      // nothing left to pick: back to the menu
         }

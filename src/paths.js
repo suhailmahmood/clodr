@@ -5,8 +5,7 @@ import { CI } from './platform.js';
 
 export const claudeDir = () => process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
 
-export const claudeJsonPath = () =>
-  process.env.CLAUDE_CONFIG_DIR ? path.join(process.env.CLAUDE_CONFIG_DIR, '.claude.json') : path.join(os.homedir(), '.claude.json');
+export const claudeJsonPath = () => path.join(process.env.CLAUDE_CONFIG_DIR || os.homedir(), '.claude.json');
 
 // Claude names a project's session dir after its folder: every non-alphanumeric char becomes "-" (lossy).
 export const encodeDir = (dir) => dir.replace(/[^a-zA-Z0-9]/g, '-');

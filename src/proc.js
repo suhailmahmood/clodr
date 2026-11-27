@@ -4,7 +4,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { WIN } from './platform.js';
 
 // Finds an executable on PATH. On Windows tries the PATHEXT-style suffixes.
-export function which(cmd) {
+function which(cmd) {
   const exts = WIN ? ['.exe', '.cmd', '.bat', '.com'] : [''];
   for (const dir of (process.env.PATH || '').split(path.delimiter)) {
     if (!dir) continue;
@@ -16,11 +16,13 @@ export function which(cmd) {
   return null;
 }
 
-// spawn args for a resolved executable; .cmd/.bat shims need a shell (and our own quoting).
-function spawnSpec(exe, args) {
+// spawn args for cmd, or {error} when it cannot be run. .cmd/.bat shims need a shell (and our own quoting).
+function prepare(cmd, args) {
+  const exe = which(cmd);
+  if (!exe) return { error: `${cmd} not found on PATH` };
   if (WIN && /\.(cmd|bat)$/i.test(exe)) {
     const bad = [exe, ...args].find((a) => /["%\r\n]/.test(a));
-    if (bad) throw new Error(`Unsupported character in argument: ${bad}`);
+    if (bad) return { error: `Unsupported character in argument: ${bad}` };
     return { cmd: `"${exe}" ${args.map((a) => `"${a}"`).join(' ')}`, args: [], shell: true };
   }
   return { cmd: exe, args, shell: false };
@@ -30,20 +32,17 @@ const failure = (err, out = '') => ({ ok: false, code: null, out, err });
 
 // Result of a finished command: {ok, code, out, err}. Never throws.
 export function runSync(cmd, args) {
-  const exe = which(cmd);
-  if (!exe) return failure(`${cmd} not found on PATH`);
-  let s;
-  try { s = spawnSpec(exe, args); } catch (e) { return failure(e.message); }
+  const s = prepare(cmd, args);
+  if (s.error) return failure(s.error);
   const r = spawnSync(s.cmd, s.args, { encoding: 'utf8', shell: s.shell, windowsHide: true });
   return { ok: r.status === 0, code: r.status, out: r.stdout || '', err: r.stderr || (r.error ? r.error.message : '') };
 }
 
+// Async runSync.
 export function run(cmd, args) {
-  const exe = which(cmd);
-  if (!exe) return Promise.resolve(failure(`${cmd} not found on PATH`));
+  const s = prepare(cmd, args);
+  if (s.error) return Promise.resolve(failure(s.error));
   return new Promise((resolve) => {
-    let s;
-    try { s = spawnSpec(exe, args); } catch (e) { resolve(failure(e.message)); return; }
     const p = spawn(s.cmd, s.args, { shell: s.shell, windowsHide: true });
     let out = '';
     let err = '';
@@ -56,12 +55,10 @@ export function run(cmd, args) {
 
 // Runs cmd in cwd with inherited stdio. Resolves {code, error}: error = why it could not start (nothing is printed).
 export function launch(cmd, args, cwd) {
-  const exe = which(cmd);
-  if (!exe) return Promise.resolve({ code: 1, error: `${cmd} not found on PATH` });
+  const s = prepare(cmd, args);
+  if (s.error) return Promise.resolve({ code: 1, error: s.error });
   if (cwd && !fs.existsSync(cwd)) return Promise.resolve({ code: 1, error: `Folder not found: ${cwd}` });
   return new Promise((resolve) => {
-    let s;
-    try { s = spawnSpec(exe, args); } catch (e) { resolve({ code: 1, error: e.message }); return; }
     const ignore = () => {};              // Ctrl+C belongs to the child while it runs: do not let it kill us too
     process.on('SIGINT', ignore);
     const done = (r) => { process.off('SIGINT', ignore); resolve(r); };
