@@ -1,4 +1,4 @@
-# Publishes to npm when a v* tag is pushed. Auth is npm trusted publishing (OIDC): no token is stored.
+# On a v* tag push: publishes to npm, then creates a GitHub Release. npm auth is trusted publishing (OIDC): no token is stored.
 name: Publish
 
 on:
@@ -6,7 +6,7 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: read
+  contents: write          # create the GitHub Release
   id-token: write
 
 jobs:
@@ -23,3 +23,6 @@ jobs:
         run: test "${GITHUB_REF_NAME}" = "v$(node -p "require('./package.json').version")"
       - run: npm test
       - run: npm publish
+      - run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
