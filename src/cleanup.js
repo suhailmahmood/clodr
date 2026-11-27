@@ -9,7 +9,8 @@ import { runSync } from './proc.js';
 
 // ---- running claude detection ----
 
-// Image names of the given live pids, or null when they cannot be listed.
+// Image name (Windows) or command line (elsewhere) of the given live pids, or null when they cannot be listed.
+// Not `ps -o comm`: on Linux that is the main thread's name, which a program (Node among them) can change.
 function processNames(pids) {
   const names = new Map();
   if (WIN) {
@@ -20,11 +21,11 @@ function processNames(pids) {
       if (m && pids.includes(Number(m[2]))) names.set(Number(m[2]), m[1]);
     }
   } else {
-    const r = runSync('ps', ['-p', pids.join(','), '-o', 'pid=,comm=']);
+    const r = runSync('ps', ['-p', pids.join(','), '-o', 'pid=,args=']);
     if (!r.ok && !r.out) return null;
     for (const line of r.out.split('\n')) {
       const m = /^\s*(\d+)\s+(.*)$/.exec(line);
-      if (m) names.set(Number(m[1]), path.basename(m[2].trim()));
+      if (m) names.set(Number(m[1]), m[2].trim());
     }
   }
   return names;
@@ -43,13 +44,13 @@ function processStartTimes(pids) {
   return times;
 }
 
-// Claude runs as its own binary, or under node when installed from npm.
+// Claude runs as its own binary, or under node when installed from npm (its script path names claude too).
 const CLAUDE_IMAGE = /claude|node/i;
 
 // Claude writes ~/.claude/sessions/<pid>.json for every running session, but leaves the file behind when it
 // does not exit cleanly, and the pid may since belong to another process. On Windows the file records the
 // process creation time (procStart): a pid is claude only if it was created at that exact moment, which a reused
-// pid never matches. Without that, a live pid counts only if its image looks like claude.
+// pid never matches. Without that, a live pid counts only if its image or command line looks like claude.
 // EPERM = alive but not ours to signal.
 export function runningSessions() {
   const dir = path.join(claudeDir(), 'sessions');
